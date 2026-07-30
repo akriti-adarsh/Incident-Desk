@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,3 +94,21 @@ async def get_principal(
 
 
 CurrentUser = Annotated[models.User, Depends(get_current_user)]
+
+
+@dataclass(frozen=True)
+class AuditInfo:
+    """Request origin details recorded alongside audit entries."""
+
+    ip_address: str | None
+    user_agent: str | None
+
+
+def get_audit_info(request: Request) -> AuditInfo:
+    return AuditInfo(
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+
+
+AuditDep = Annotated[AuditInfo, Depends(get_audit_info)]

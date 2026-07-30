@@ -2,7 +2,17 @@
 
 from fastapi import APIRouter
 
-from incident_desk.api.v1 import apikeys, auth, incidents, members, oncall, orgs, services
+from incident_desk.api.v1 import (
+    apikeys,
+    audit,
+    auth,
+    incidents,
+    members,
+    metrics,
+    oncall,
+    orgs,
+    services,
+)
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth.router)
@@ -13,3 +23,5 @@ api_v1_router.include_router(services.router)
 api_v1_router.include_router(oncall.router)
 api_v1_router.include_router(incidents.router)
 api_v1_router.include_router(apikeys.router)
+api_v1_router.include_router(audit.router)
+api_v1_router.include_router(metrics.router)

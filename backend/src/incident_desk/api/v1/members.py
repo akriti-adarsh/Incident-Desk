@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.api.authz import AuthContext, require
-from incident_desk.api.deps import CurrentUser
+from incident_desk.api.deps import AuditDep, CurrentUser
 from incident_desk.api.v1.auth import get_email_sender
 from incident_desk.authz import Permission
+from incident_desk.db import models
 from incident_desk.db.engine import get_db_session
 from incident_desk.schemas.common import Data
 from incident_desk.schemas.members import (
@@ -20,6 +21,7 @@ from incident_desk.schemas.members import (
     InviteRequest,
     MemberOut,
 )
+from incident_desk.services import audit
 from incident_desk.services import members as member_service
 from incident_desk.services.emails import EmailSender
 
@@ -64,9 +66,24 @@ async def change_role(
     payload: ChangeRoleRequest,
     ctx: MemberManageCtx,
     session: SessionDep,
+    info: AuditDep,
 ) -> Data[MemberOut]:
+    target = await session.get(models.Membership, (user_id, ctx.org.id))
+    before_role = target.role.value if target else None
     membership = await member_service.change_role(
         session, ctx.org, actor_role=ctx.role, user_id=user_id, new_role=payload.role
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="member.role_changed",
+        resource_type="membership",
+        resource_id=user_id,
+        before={"role": before_role},
+        after={"role": membership.role.value},
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     await session.commit()
     pairs = await member_service.list_members(session, ctx.org)
@@ -89,8 +106,20 @@ async def change_role(
     summary="Remove a member",
     description="The last owner cannot be removed.",
 )
-async def remove_member(user_id: UUID, ctx: MemberManageCtx, session: SessionDep) -> None:
+async def remove_member(
+    user_id: UUID, ctx: MemberManageCtx, session: SessionDep, info: AuditDep
+) -> None:
     await member_service.remove_member(session, ctx.org, actor_role=ctx.role, user_id=user_id)
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="member.removed",
+        resource_type="membership",
+        resource_id=user_id,
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
+    )
     await session.commit()
 
 
@@ -105,6 +134,7 @@ async def invite(
     ctx: MemberManageCtx,
     session: SessionDep,
     sender: SenderDep,
+    info: AuditDep,
 ) -> Data[InvitationOut]:
     invitation, token = await member_service.create_invitation(
         session,
@@ -113,6 +143,17 @@ async def invite(
         role=payload.role,
         invited_by=ctx.require_user(),
         actor_role=ctx.role,
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="invitation.created",
+        resource_type="invitation",
+        resource_id=invitation.id,
+        after={"email": invitation.email, "role": invitation.role.value},
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     await session.commit()
     await sender.send_invitation_email(to=invitation.email, org_name=ctx.org.name, token=token)
@@ -140,9 +181,20 @@ async def revoke_invitation(invitation_id: UUID, ctx: MemberManageCtx, session: 
     ),
 )
 async def accept_invitation(
-    payload: AcceptInvitationRequest, user: CurrentUser, session: SessionDep
+    payload: AcceptInvitationRequest, user: CurrentUser, session: SessionDep, info: AuditDep
 ) -> Data[AcceptedInvitationOut]:
     org, membership = await member_service.accept_invitation(session, user, payload.token)
+    await audit.record(
+        session,
+        org_id=org.id,
+        actor_id=user.id,
+        action="invitation.accepted",
+        resource_type="membership",
+        resource_id=user.id,
+        after={"role": membership.role.value},
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
+    )
     await session.commit()
     return Data(
         data=AcceptedInvitationOut(org_slug=org.slug, org_name=org.name, role=membership.role)

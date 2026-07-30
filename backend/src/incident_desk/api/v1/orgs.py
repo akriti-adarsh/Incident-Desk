@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.api.authz import AuthContext, require
-from incident_desk.api.deps import CurrentUser
+from incident_desk.api.deps import AuditDep, CurrentUser
 from incident_desk.authz import Permission
 from incident_desk.db.engine import get_db_session
 from incident_desk.schemas.common import Data
 from incident_desk.schemas.orgs import OrgCreate, OrgOut, OrgUpdate, OrgWithRoleOut
+from incident_desk.services import audit
 from incident_desk.services import orgs as org_service
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
@@ -66,11 +67,25 @@ async def update_org(
     payload: OrgUpdate,
     ctx: Annotated[AuthContext, Depends(require(Permission.ORG_MANAGE))],
     session: SessionDep,
+    info: AuditDep,
 ) -> Data[OrgOut]:
+    before = {"name": ctx.org.name, "settings": ctx.org.settings}
     if payload.name is not None:
         ctx.org.name = payload.name
     if payload.settings is not None:
         ctx.org.settings = payload.settings
     await session.flush()
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="org.updated",
+        resource_type="organization",
+        resource_id=ctx.org.id,
+        before=before,
+        after={"name": ctx.org.name, "settings": ctx.org.settings},
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
+    )
     await session.commit()
     return Data(data=OrgOut.model_validate(ctx.org))

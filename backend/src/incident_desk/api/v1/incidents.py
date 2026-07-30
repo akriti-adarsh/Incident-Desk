@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.api.authz import AuthContext, require
+from incident_desk.api.deps import AuditDep
 from incident_desk.authz import Permission, role_has
 from incident_desk.config import get_settings
 from incident_desk.db.engine import get_db_session
@@ -25,8 +26,8 @@ from incident_desk.schemas.incidents import (
     StatusChangeRequest,
 )
 from incident_desk.services import attachments as attachment_service
+from incident_desk.services import audit, idempotency, timeline
 from incident_desk.services import comments as comment_service
-from incident_desk.services import idempotency, timeline
 from incident_desk.services import incidents as incident_service
 
 router = APIRouter(prefix="/orgs/{org_slug}/incidents", tags=["incidents"])
@@ -84,6 +85,7 @@ async def create_incident(
     payload: IncidentCreate,
     ctx: CreateCtx,
     session: SessionDep,
+    info: AuditDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=200)] = None,
 ) -> Response:
     if idempotency_key is not None:
@@ -102,6 +104,21 @@ async def create_incident(
         assigned_to=payload.assigned_to,
         started_at=payload.started_at,
         tags=payload.tags,
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="incident.created",
+        resource_type="incident",
+        resource_id=incident.id,
+        after={
+            "number": f"INC-{incident.sequence_number}",
+            "title": incident.title,
+            "severity": incident.severity.value,
+        },
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     body = Data(data=IncidentOut.model_validate(incident)).model_dump_json()
 
@@ -172,8 +189,14 @@ async def get_incident(
     ),
 )
 async def change_status(
-    incident_id: UUID, payload: StatusChangeRequest, ctx: UpdateCtx, session: SessionDep
+    incident_id: UUID,
+    payload: StatusChangeRequest,
+    ctx: UpdateCtx,
+    session: SessionDep,
+    info: AuditDep,
 ) -> Data[IncidentOut]:
+    incident = await incident_service.get_incident(session, ctx.org, incident_id)
+    before_status = incident.status.value
     incident = await incident_service.transition_status(
         session,
         ctx.org,
@@ -181,6 +204,18 @@ async def change_status(
         new_status=payload.status,
         actor=ctx.user,
         resolution_summary=payload.resolution_summary,
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="incident.status_changed",
+        resource_type="incident",
+        resource_id=incident.id,
+        before={"status": before_status},
+        after={"status": incident.status.value},
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     await session.commit()
     return Data(data=IncidentOut.model_validate(incident))
@@ -201,6 +236,7 @@ async def update_incident(
     ctx: UpdateCtx,
     session: SessionDep,
     response: Response,
+    info: AuditDep,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> Data[IncidentOut]:
     if if_match is None:
@@ -217,6 +253,17 @@ async def update_incident(
         assigned_to=payload.assigned_to,
         assignee_provided="assigned_to" in payload.model_fields_set,
         expected_version=_parse_if_match(if_match),
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="incident.updated",
+        resource_type="incident",
+        resource_id=incident.id,
+        after=payload.model_dump(exclude_unset=True, mode="json"),
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     await session.commit()
     response.headers["ETag"] = _etag(incident.version)
@@ -262,10 +309,24 @@ async def list_comments(
 
 @router.post("/{incident_id}/comments", status_code=201, summary="Add a comment")
 async def add_comment(
-    incident_id: UUID, payload: CommentCreate, ctx: CommentCtx, session: SessionDep
+    incident_id: UUID,
+    payload: CommentCreate,
+    ctx: CommentCtx,
+    session: SessionDep,
+    info: AuditDep,
 ) -> Data[CommentOut]:
     comment = await comment_service.add_comment(
         session, ctx.org, incident_id, author=ctx.require_user(), body=payload.body
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="comment.added",
+        resource_type="comment",
+        resource_id=comment.id,
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     await session.commit()
     return Data(data=CommentOut.model_validate(comment))
@@ -297,7 +358,11 @@ async def edit_comment(
     description="Soft delete by the author, or by an admin (comment moderation).",
 )
 async def delete_comment(
-    incident_id: UUID, comment_id: UUID, ctx: CommentCtx, session: SessionDep
+    incident_id: UUID,
+    comment_id: UUID,
+    ctx: CommentCtx,
+    session: SessionDep,
+    info: AuditDep,
 ) -> None:
     await comment_service.delete_comment(
         session,
@@ -306,6 +371,16 @@ async def delete_comment(
         comment_id,
         actor=ctx.require_user(),
         can_moderate=role_has(ctx.role, Permission.COMMENT_MODERATE),
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="comment.deleted",
+        resource_type="comment",
+        resource_id=comment_id,
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     await session.commit()
 
@@ -325,10 +400,25 @@ async def list_attachments(
     description="Multipart upload, streamed to storage with a SHA-256 checksum.",
 )
 async def upload_attachment(
-    incident_id: UUID, file: UploadFile, ctx: UploadCtx, session: SessionDep
+    incident_id: UUID,
+    file: UploadFile,
+    ctx: UploadCtx,
+    session: SessionDep,
+    info: AuditDep,
 ) -> Data[AttachmentOut]:
     attachment = await attachment_service.save_attachment(
         session, get_settings(), ctx.org, incident_id, uploader=ctx.require_user(), upload=file
+    )
+    await audit.record(
+        session,
+        org_id=ctx.org.id,
+        actor_id=ctx.actor_id,
+        action="attachment.uploaded",
+        resource_type="attachment",
+        resource_id=attachment.id,
+        after={"filename": attachment.filename, "bytes": attachment.size_bytes},
+        ip_address=info.ip_address,
+        user_agent=info.user_agent,
     )
     await session.commit()
     return Data(data=AttachmentOut.model_validate(attachment))
