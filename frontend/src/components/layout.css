@@ -1,0 +1,132 @@
+.shell {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  height: 100vh;
+}
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-h2);
+}
+.brand-mark {
+  color: var(--amber);
+}
+.org-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.org-label {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.org-role {
+  align-self: flex-start;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--amber);
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-item {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+.nav-item:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+.nav-active {
+  background: var(--surface-3);
+  color: var(--ink);
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+.sidebar-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.theme-toggle,
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: var(--fs-small);
+  text-align: left;
+  padding: 0;
+}
+.theme-toggle:hover,
+.link-btn:hover {
+  color: var(--ink);
+}
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.account-name {
+  font-weight: 500;
+  font-size: var(--fs-small);
+}
+.content {
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+}
+.content:focus {
+  outline: none;
+}
+
+@media (max-width: 820px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .sidebar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-foot {
+    margin-top: 0;
+    flex-direction: row;
+    gap: var(--space-4);
+  }
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .content {
+    padding: var(--space-4);
+  }
+}

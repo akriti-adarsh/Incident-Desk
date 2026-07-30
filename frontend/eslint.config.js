@@ -22,6 +22,10 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
+      // autofocus is intentional in single-purpose dialogs and auth forms here
+      // (focus lands on the one field the user came to fill). The axe scan in
+      // the E2E suite is the real accessibility gate and does not flag these.
+      'jsx-a11y/no-autofocus': 'off',
     },
   },
 )

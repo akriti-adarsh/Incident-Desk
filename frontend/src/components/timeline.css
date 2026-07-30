@@ -1,0 +1,61 @@
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-2);
+  position: relative;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--border-strong);
+}
+.tl-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+.tl-glyph {
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  font-size: 13px;
+  color: var(--ink);
+}
+.tl-system .tl-glyph {
+  border-style: dashed;
+  color: var(--amber);
+}
+.tl-content {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: 4px;
+}
+.tl-desc {
+  margin: 0;
+  font-size: var(--fs-small);
+}
+.tl-tag {
+  margin-left: var(--space-2);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--amber);
+}
+.tl-time {
+  color: var(--ink-faint);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
