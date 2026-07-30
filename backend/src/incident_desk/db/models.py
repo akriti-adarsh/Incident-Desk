@@ -6,7 +6,7 @@ cross-tenant uniqueness is expressed per organisation, never globally.
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -14,8 +14,10 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
+    Date,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Identity,
     Index,
@@ -406,6 +408,25 @@ class IdempotencyKey(TimestampMixin, Base):
     key: Mapped[str] = mapped_column(String(200), primary_key=True)
     status_code: Mapped[int] = mapped_column(Integer, nullable=False)
     response_body: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class OrgMetricsDaily(TimestampMixin, Base):
+    """Nightly per-org rollup so dashboards read a small table, not raw incidents."""
+
+    __tablename__ = "org_metrics_daily"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    incidents_created: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    incidents_resolved: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    mtta_seconds: Mapped[float | None] = mapped_column(Float)
+    mttr_seconds: Mapped[float | None] = mapped_column(Float)
 
 
 class OrganizationCounter(TimestampMixin, Base):

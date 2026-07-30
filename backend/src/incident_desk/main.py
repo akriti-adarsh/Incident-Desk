@@ -4,6 +4,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
+from arq import create_pool
+from arq.connections import RedisSettings
 from fastapi import APIRouter, Depends, FastAPI
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -57,9 +59,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     broker = RealtimeBroker(redis)
     app.state.broker = broker
     await broker.start()
+    app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))
     try:
         yield
     finally:
+        await app.state.arq.aclose()
         await broker.stop()
         await redis.aclose()
         await engine.dispose()

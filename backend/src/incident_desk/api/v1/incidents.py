@@ -8,12 +8,13 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.api.authz import AuthContext, require
-from incident_desk.api.deps import AuditDep, BrokerDep
+from incident_desk.api.deps import ArqDep, AuditDep, BrokerDep
 from incident_desk.authz import Permission, role_has
 from incident_desk.config import get_settings
 from incident_desk.db.engine import get_db_session
 from incident_desk.enums import IncidentStatus, Severity
 from incident_desk.errors import AppError
+from incident_desk.jobs import escalation
 from incident_desk.schemas.common import Data, Page
 from incident_desk.schemas.incidents import (
     AttachmentOut,
@@ -87,6 +88,7 @@ async def create_incident(
     session: SessionDep,
     info: AuditDep,
     broker: BrokerDep,
+    arq: ArqDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=200)] = None,
 ) -> Response:
     if idempotency_key is not None:
@@ -140,6 +142,10 @@ async def create_incident(
             "severity": incident.severity.value,
         },
     )
+    if incident.severity is Severity.SEV1:
+        # If nobody acknowledges within the org's timeout, escalation starts.
+        config = escalation.parse_config(ctx.org.settings)
+        await arq.enqueue_job("check_escalation", str(incident.id), 0, _defer_by=config.ack_timeout)
     return Response(content=body, status_code=201, media_type="application/json")
 
 
@@ -443,6 +449,7 @@ async def upload_attachment(
     ctx: UploadCtx,
     session: SessionDep,
     info: AuditDep,
+    arq: ArqDep,
 ) -> Data[AttachmentOut]:
     attachment = await attachment_service.save_attachment(
         session, get_settings(), ctx.org, incident_id, uploader=ctx.require_user(), upload=file
@@ -459,6 +466,7 @@ async def upload_attachment(
         user_agent=info.user_agent,
     )
     await session.commit()
+    await arq.enqueue_job("scan_attachment", str(attachment.id), str(incident_id))
     return Data(data=AttachmentOut.model_validate(attachment))
 
 

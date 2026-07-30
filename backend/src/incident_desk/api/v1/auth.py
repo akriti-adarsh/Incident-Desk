@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,18 +31,18 @@ from incident_desk.schemas.auth import (
 from incident_desk.schemas.common import Data
 from incident_desk.security.jwt import create_mfa_token
 from incident_desk.services import auth_service, mfa, sessions
-from incident_desk.services.emails import EmailSender
+from incident_desk.services.emails import EmailQueue
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 
-def get_email_sender() -> EmailSender:
-    return EmailSender(get_settings())
+def get_email_sender(request: Request) -> EmailQueue:
+    return EmailQueue(request.app.state.arq, get_settings())
 
 
-SenderDep = Annotated[EmailSender, Depends(get_email_sender)]
+SenderDep = Annotated[EmailQueue, Depends(get_email_sender)]
 
 
 @router.post(

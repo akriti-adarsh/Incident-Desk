@@ -23,13 +23,13 @@ from incident_desk.schemas.members import (
 )
 from incident_desk.services import audit
 from incident_desk.services import members as member_service
-from incident_desk.services.emails import EmailSender
+from incident_desk.services.emails import EmailQueue
 
 router = APIRouter(prefix="/orgs/{org_slug}", tags=["members"])
 accept_router = APIRouter(prefix="/invitations", tags=["members"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
-SenderDep = Annotated[EmailSender, Depends(get_email_sender)]
+SenderDep = Annotated[EmailQueue, Depends(get_email_sender)]
 
 MemberViewCtx = Annotated[AuthContext, Depends(require(Permission.MEMBER_VIEW))]
 MemberManageCtx = Annotated[AuthContext, Depends(require(Permission.MEMBER_MANAGE))]

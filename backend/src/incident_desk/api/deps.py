@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
 
+from arq.connections import ArqRedis
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
@@ -120,3 +121,10 @@ def get_broker(request: Request) -> RealtimeBroker:
 
 
 BrokerDep = Annotated[RealtimeBroker, Depends(get_broker)]
+
+
+def get_arq(request: Request) -> ArqRedis:
+    return request.app.state.arq  # type: ignore[no-any-return]
+
+
+ArqDep = Annotated[ArqRedis, Depends(get_arq)]

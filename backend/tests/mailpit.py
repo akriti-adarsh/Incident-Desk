@@ -1,14 +1,22 @@
-"""Helpers for asserting delivered email through the Mailpit capture API."""
+"""Helpers for asserting delivered email through the Mailpit capture API.
+
+Email leaves the app through the ARQ queue, so every assertion first drains
+the queue with the real worker: what Mailpit holds afterwards is exactly what
+the system would have sent.
+"""
 
 import os
 import re
 
 import httpx
 
+from tests.jobs_util import drain_jobs
+
 BASE_URL = os.environ.get("MAILPIT_API_URL", "http://localhost:58026")
 
 
 async def messages_to(address: str) -> list[dict[str, object]]:
+    await drain_jobs()
     async with httpx.AsyncClient(base_url=BASE_URL) as client:
         search = await client.get("/api/v1/search", params={"query": f'to:"{address}"'})
         search.raise_for_status()
