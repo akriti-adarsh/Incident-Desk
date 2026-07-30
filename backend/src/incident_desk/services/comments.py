@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from incident_desk import pagination
 from incident_desk.db import models
 from incident_desk.errors import ForbiddenError, NotFoundError
 from incident_desk.services import timeline
@@ -36,18 +37,33 @@ async def _get_comment(
 
 
 async def list_comments(
-    session: AsyncSession, org: models.Organization, incident_id: UUID
-) -> list[models.Comment]:
+    session: AsyncSession,
+    org: models.Organization,
+    incident_id: UUID,
+    *,
+    limit: int = 100,
+    cursor: str | None = None,
+) -> tuple[list[models.Comment], str | None]:
     incident = await get_incident(session, org, incident_id)
-    rows = await session.scalars(
-        select(models.Comment)
-        .where(
-            models.Comment.incident_id == incident.id,
-            models.Comment.deleted_at.is_(None),
-        )
-        .order_by(models.Comment.seq)
+    query = select(models.Comment).where(
+        models.Comment.incident_id == incident.id,
+        models.Comment.deleted_at.is_(None),
     )
-    return list(rows)
+    if cursor is not None:
+        sort_value, _ = pagination.decode_cursor(cursor)
+        try:
+            pivot = int(sort_value)
+        except ValueError as exc:
+            raise pagination.InvalidCursorError(
+                "The cursor is not valid; request the first page again"
+            ) from exc
+        query = query.where(models.Comment.seq > pivot)
+    rows = list(await session.scalars(query.order_by(models.Comment.seq).limit(limit + 1)))
+    next_cursor = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        next_cursor = pagination.encode_cursor(str(rows[-1].seq), rows[-1].id)
+    return rows, next_cursor
 
 
 async def add_comment(

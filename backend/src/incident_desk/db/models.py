@@ -13,6 +13,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     Enum,
     ForeignKey,
@@ -27,7 +28,7 @@ from sqlalchemy import (
     literal_column,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, ExcludeConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from incident_desk.db.base import Base, TimestampMixin
@@ -115,7 +116,10 @@ class Service(TimestampMixin, Base):
 
 class Incident(TimestampMixin, Base):
     __tablename__ = "incidents"
-    __table_args__ = (UniqueConstraint("org_id", "sequence_number"),)
+    __table_args__ = (
+        UniqueConstraint("org_id", "sequence_number"),
+        Index("ix_incidents_search_vector", "search_vector", postgresql_using="gin"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(
@@ -147,6 +151,13 @@ class Incident(TimestampMixin, Base):
     resolution_summary: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default=text("'{}'::text[]")
+    )
+    # Kept in step by Postgres itself (generated column); GIN-indexed for
+    # full-text search over title + description.
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', title || ' ' || description)", persisted=True),
+        deferred=True,
     )
 
 

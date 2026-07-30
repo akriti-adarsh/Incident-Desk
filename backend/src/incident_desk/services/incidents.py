@@ -3,10 +3,10 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from incident_desk import state_machine
+from incident_desk import pagination, state_machine
 from incident_desk.db import models
 from incident_desk.enums import IncidentStatus, Severity
 from incident_desk.errors import AppError, ConflictError, NotFoundError
@@ -224,13 +224,70 @@ async def update_incident(
     return incident
 
 
-async def list_recent_incidents(
-    session: AsyncSession, org: models.Organization, limit: int = 50
-) -> list[models.Incident]:
-    rows = await session.scalars(
-        select(models.Incident)
-        .where(models.Incident.org_id == org.id)
-        .order_by(models.Incident.created_at.desc(), models.Incident.id.desc())
-        .limit(limit)
-    )
-    return list(rows)
+SORT_FIELDS = {
+    "created_at": models.Incident.created_at,
+    "started_at": models.Incident.started_at,
+}
+
+
+async def list_incidents(
+    session: AsyncSession,
+    org: models.Organization,
+    *,
+    statuses: list[IncidentStatus] | None = None,
+    severities: list[Severity] | None = None,
+    service_id: UUID | None = None,
+    assigned_to: UUID | None = None,
+    tag: str | None = None,
+    q: str | None = None,
+    sort: str = "created_at",
+    limit: int = 25,
+    cursor: str | None = None,
+) -> tuple[list[models.Incident], str | None]:
+    """Filtered, searched, cursor-paginated incident listing (newest first).
+
+    The ORDER BY is (sort_field DESC, id DESC); the cursor holds the last
+    row's pair, and the keyset predicate is a row-value comparison, so pages
+    stay stable even when every row shares one timestamp.
+    """
+    sort_col = SORT_FIELDS[sort]
+    query = select(models.Incident).where(models.Incident.org_id == org.id)
+    if statuses:
+        query = query.where(models.Incident.status.in_(statuses))
+    if severities:
+        query = query.where(models.Incident.severity.in_(severities))
+    if service_id is not None:
+        query = query.where(models.Incident.service_id == service_id)
+    if assigned_to is not None:
+        query = query.where(models.Incident.assigned_to == assigned_to)
+    if tag is not None:
+        query = query.where(models.Incident.tags.contains([tag]))
+    if q:
+        query = query.where(
+            models.Incident.search_vector.op("@@")(func.websearch_to_tsquery("english", q))
+        )
+    if cursor is not None:
+        sort_value, row_id = pagination.decode_uuid_cursor(cursor)
+        try:
+            pivot = datetime.fromisoformat(sort_value)
+        except ValueError as exc:
+            raise pagination.InvalidCursorError(
+                "The cursor is not valid; request the first page again"
+            ) from exc
+        # Keyset predicate, spelled out so the tiebreaker is explicit:
+        # rows strictly after (pivot, row_id) in (sort DESC, id DESC) order.
+        query = query.where(
+            or_(
+                sort_col < pivot,
+                and_(sort_col == pivot, models.Incident.id < row_id),
+            )
+        )
+
+    query = query.order_by(sort_col.desc(), models.Incident.id.desc()).limit(limit + 1)
+    rows = list(await session.scalars(query))
+    next_cursor = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        next_cursor = pagination.encode_cursor(getattr(last, sort).isoformat(), last.id)
+    return rows, next_cursor

@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,8 @@ from incident_desk.api.authz import AuthContext, require
 from incident_desk.authz import Permission, role_has
 from incident_desk.config import get_settings
 from incident_desk.db.engine import get_db_session
-from incident_desk.schemas.common import Data
+from incident_desk.enums import IncidentStatus, Severity
+from incident_desk.schemas.common import Data, Page
 from incident_desk.schemas.incidents import (
     AttachmentOut,
     CommentCreate,
@@ -62,10 +63,42 @@ async def create_incident(
     return Data(data=IncidentOut.model_validate(incident))
 
 
-@router.get("", summary="List recent incidents")
-async def list_incidents(ctx: ViewCtx, session: SessionDep) -> Data[list[IncidentOut]]:
-    incidents = await incident_service.list_recent_incidents(session, ctx.org)
-    return Data(data=[IncidentOut.model_validate(i) for i in incidents])
+@router.get(
+    "",
+    summary="List incidents",
+    description=(
+        "Filterable, searchable, cursor-paginated, newest first. Cursors are "
+        "keyset-based (never OFFSET) so pages stay stable under concurrent "
+        "writes; see the next_cursor field."
+    ),
+)
+async def list_incidents(
+    ctx: ViewCtx,
+    session: SessionDep,
+    status: Annotated[list[IncidentStatus] | None, Query()] = None,
+    severity: Annotated[list[Severity] | None, Query()] = None,
+    service_id: Annotated[UUID | None, Query()] = None,
+    assigned_to: Annotated[UUID | None, Query()] = None,
+    tag: Annotated[str | None, Query(max_length=100)] = None,
+    q: Annotated[str | None, Query(max_length=200, description="Full-text search")] = None,
+    sort: Annotated[str, Query(pattern="^(created_at|started_at)$")] = "created_at",
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    cursor: Annotated[str | None, Query()] = None,
+) -> Page[IncidentOut]:
+    incidents, next_cursor = await incident_service.list_incidents(
+        session,
+        ctx.org,
+        statuses=status,
+        severities=severity,
+        service_id=service_id,
+        assigned_to=assigned_to,
+        tag=tag,
+        q=q,
+        sort=sort,
+        limit=limit,
+        cursor=cursor,
+    )
+    return Page(data=[IncidentOut.model_validate(i) for i in incidents], next_cursor=next_cursor)
 
 
 @router.get("/{incident_id}", summary="Get an incident")
@@ -127,10 +160,18 @@ async def update_incident(
     summary="The incident timeline",
     description="Append-only event log, oldest first: the source of truth for what happened.",
 )
-async def list_events(incident_id: UUID, ctx: ViewCtx, session: SessionDep) -> Data[list[EventOut]]:
+async def list_events(
+    incident_id: UUID,
+    ctx: ViewCtx,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    cursor: Annotated[str | None, Query()] = None,
+) -> Page[EventOut]:
     incident = await incident_service.get_incident(session, ctx.org, incident_id)
-    events = await timeline.list_events(session, incident.id)
-    return Data(data=[EventOut.model_validate(e) for e in events])
+    events, next_cursor = await timeline.list_events(
+        session, incident.id, limit=limit, cursor=cursor
+    )
+    return Page(data=[EventOut.model_validate(e) for e in events], next_cursor=next_cursor)
 
 
 CommentCtx = Annotated[AuthContext, Depends(require(Permission.COMMENT_CREATE))]
@@ -139,10 +180,16 @@ UploadCtx = Annotated[AuthContext, Depends(require(Permission.ATTACHMENT_UPLOAD)
 
 @router.get("/{incident_id}/comments", summary="List comments")
 async def list_comments(
-    incident_id: UUID, ctx: ViewCtx, session: SessionDep
-) -> Data[list[CommentOut]]:
-    comments = await comment_service.list_comments(session, ctx.org, incident_id)
-    return Data(data=[CommentOut.model_validate(c) for c in comments])
+    incident_id: UUID,
+    ctx: ViewCtx,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    cursor: Annotated[str | None, Query()] = None,
+) -> Page[CommentOut]:
+    comments, next_cursor = await comment_service.list_comments(
+        session, ctx.org, incident_id, limit=limit, cursor=cursor
+    )
+    return Page(data=[CommentOut.model_validate(c) for c in comments], next_cursor=next_cursor)
 
 
 @router.post("/{incident_id}/comments", status_code=201, summary="Add a comment")
