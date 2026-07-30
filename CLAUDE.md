@@ -18,14 +18,12 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 10 of 39. Last completed: "test: exhaustive permission matrix and tenant isolation"
-- Suite at last commit: backend "146 passed" · Coverage: 98.47% · frontend "1 passed"
-- Open deviations: 0 · Next up: commits 11–20 (session B)
-- Notes for next session: session A complete. Boundary checks done: permission matrix
-  exhaustive (4 roles x 17 permissions), tenant isolation parametrised over the route
-  table asserts 404 (not 403), refresh-reuse kills the family (tests/test_refresh_reuse.py).
-  Route-registration guard already proves it catches missing deps
-  (test_the_checker_catches_a_route_missing_auth). FastAPI defers router inclusion;
-  use tests/route_table.py to enumerate routes, not app.routes directly.
+- Plan position: 11 of 39. Last completed: "feat(api): organizations, memberships, services"
+- Suite at last commit: backend "186 passed" · Coverage: 97.23% · frontend "1 passed"
+- Open deviations: 0 · Next up: commits 12–20
+- Notes: session B in progress. Test plumbing: per-request savepoint sessions on one
+  outer connection (conftest); services use begin_nested around risky flushes;
+  Base has eager_defaults=True so onupdate timestamps come back via RETURNING.
+  Route enumeration via tests/route_table.py (FastAPI defers router inclusion).
 - Note: coverage needs concurrency=["thread","greenlet"] or lines after awaited DB calls vanish
 - Notes for next session: session A in progress

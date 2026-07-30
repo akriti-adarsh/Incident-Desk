@@ -40,6 +40,19 @@ class EmailSender:
             ),
         )
 
+    async def send_invitation_email(self, *, to: str, org_name: str, token: str) -> None:
+        link = f"{self._settings.frontend_base_url}/accept-invite?token={token}"
+        await self.send(
+            to=to,
+            subject=f"You are invited to {org_name} on incident-desk",
+            body=(
+                f"You have been invited to join {org_name} on incident-desk.\n\n"
+                f"Open this link within 7 days to accept: {link}\n\n"
+                "If you do not have an account yet, register with this email "
+                "address first, then open the link."
+            ),
+        )
+
     async def send_password_reset_email(self, *, to: str, token: str) -> None:
         link = f"{self._settings.frontend_base_url}/reset-password?token={token}"
         await self.send(

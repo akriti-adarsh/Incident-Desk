@@ -128,18 +128,18 @@ async def test_recovery_code_works_once(
 
 async def test_enroll_twice_conflicts(client: httpx.AsyncClient, db_session: AsyncSession) -> None:
     user = await make_user(db_session)
-    await enroll_and_confirm(client, user)
-    headers = await bearer_after_mfa(client, user)
+    secret, _ = await enroll_and_confirm(client, user)
+    headers = await bearer_after_mfa(client, user, secret)
     response = await client.post("/api/v1/auth/mfa/enroll", headers=headers)
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "mfa_already_enabled"
 
 
-async def bearer_after_mfa(client: httpx.AsyncClient, user: models.User) -> dict[str, str]:
+async def bearer_after_mfa(
+    client: httpx.AsyncClient, user: models.User, secret: str
+) -> dict[str, str]:
     data = (await login(client, user.email)).json()["data"]
-    secret_user = user.mfa_secret
-    assert secret_user is not None
-    code = totp.code_at(secret_user, datetime.now(UTC) + timedelta(seconds=30))
+    code = totp.code_at(secret, datetime.now(UTC) + timedelta(seconds=30))
     completed = await challenge(client, data["mfa_token"], code)
     assert completed.status_code == 200
     return {"Authorization": f"Bearer {completed.json()['data']['access_token']}"}

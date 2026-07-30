@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.db import models
-from incident_desk.enums import Role
+from incident_desk.enums import Role, ServiceTier, Severity
 from incident_desk.security.passwords import hash_password
 
 PASSWORD = "correct-horse-battery-9"
@@ -73,3 +73,41 @@ async def make_member(
     db_session.add(membership)
     await db_session.flush()
     return membership
+
+
+async def make_service(
+    db_session: AsyncSession,
+    org: models.Organization,
+    *,
+    name: str | None = None,
+    tier: ServiceTier = ServiceTier.TIER2,
+) -> models.Service:
+    service = models.Service(org_id=org.id, name=name or f"svc-{uuid.uuid4().hex[:8]}", tier=tier)
+    db_session.add(service)
+    await db_session.flush()
+    return service
+
+
+async def make_incident(
+    db_session: AsyncSession,
+    org: models.Organization,
+    service: models.Service,
+    reporter: models.User,
+    *,
+    title: str = "Something broke",
+    severity: Severity = Severity.SEV3,
+) -> models.Incident:
+    counter = await db_session.get(models.OrganizationCounter, org.id)
+    assert counter is not None
+    counter.incident_seq += 1
+    incident = models.Incident(
+        org_id=org.id,
+        service_id=service.id,
+        sequence_number=counter.incident_seq,
+        title=title,
+        severity=severity,
+        reported_by=reporter.id,
+    )
+    db_session.add(incident)
+    await db_session.flush()
+    return incident

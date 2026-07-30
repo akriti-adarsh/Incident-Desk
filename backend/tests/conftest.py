@@ -22,7 +22,12 @@ from alembic.config import Config
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from sqlalchemy import URL, make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+)
 
 from incident_desk.config import get_settings
 from incident_desk.db.engine import get_db_session
@@ -78,29 +83,48 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
 
 
 @pytest.fixture
-async def db_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+async def db_conn(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
+    """One connection with one outer transaction per test, rolled back at the end."""
     async with engine.connect() as conn:
         trans = await conn.begin()
-        session = AsyncSession(
-            bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
-        )
         try:
-            yield session
+            yield conn
         finally:
-            await session.close()
             await trans.rollback()
+
+
+def _savepoint_session(conn: AsyncConnection) -> AsyncSession:
+    return AsyncSession(bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False)
+
+
+@pytest.fixture
+async def db_session(db_conn: AsyncConnection) -> AsyncIterator[AsyncSession]:
+    """The test's own session for factories and assertions."""
+    session = _savepoint_session(db_conn)
+    try:
+        yield session
+    finally:
+        await session.close()
 
 
 @pytest.fixture
 async def app(
-    database_url: str, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    database_url: str, db_conn: AsyncConnection, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncIterator[FastAPI]:
     from incident_desk.main import create_app
 
     monkeypatch.setenv("DATABASE_URL", database_url)
     get_settings.cache_clear()
     application = create_app()
-    application.dependency_overrides[get_db_session] = lambda: db_session
+
+    async def _request_session() -> AsyncIterator[AsyncSession]:
+        # Mirrors production: every request gets its own session. All of them
+        # join the test's outer transaction through savepoints, so a request
+        # that dies mid-flush cannot poison the next one.
+        async with _savepoint_session(db_conn) as session:
+            yield session
+
+    application.dependency_overrides[get_db_session] = _request_session
     async with LifespanManager(application):
         yield application
     get_settings.cache_clear()

@@ -25,7 +25,10 @@ async def create_organization(
     org = models.Organization(name=name, slug=slug)
     session.add(org)
     try:
-        await session.flush()
+        # SAVEPOINT around the flush: on constraint failure only this
+        # statement is rolled back and the session stays healthy.
+        async with session.begin_nested():
+            await session.flush()
     except IntegrityError as exc:  # lost a race on the unique constraint
         raise SlugTakenError("This slug is already in use") from exc
     session.add(models.Membership(user_id=owner.id, org_id=org.id, role=Role.OWNER))

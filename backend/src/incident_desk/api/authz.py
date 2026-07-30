@@ -67,7 +67,7 @@ def require(
         if row is None:
             # Not a member or no such org: identical answer either way.
             raise NotFoundError("Organization not found")
-        org, membership = row.tuple()
+        org, membership = row._tuple()
         granted = ROLE_PERMISSIONS[membership.role]
         for permission in permissions:
             if permission not in granted:
