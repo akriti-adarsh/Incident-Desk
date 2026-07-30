@@ -128,10 +128,11 @@ async def test_timeline_records_the_whole_story(
     await client.post(
         f"{base}/{incident_id}/status", json={"status": "acknowledged"}, headers=headers
     )
+    etag = (await client.get(f"{base}/{incident_id}", headers=headers)).headers["ETag"]
     await client.patch(
         f"{base}/{incident_id}",
         json={"assigned_to": str(responder.id), "severity": "sev1"},
-        headers=headers,
+        headers={**headers, "If-Match": etag},
     )
 
     events = await client.get(f"{base}/{incident_id}/events", headers=headers)
@@ -164,7 +165,7 @@ async def test_patch_edits_and_unassignment(
     edited = await client.patch(
         url,
         json={"title": "Clearer title", "tags": ["db", "latency"], "assigned_to": None},
-        headers=headers,
+        headers={**headers, "If-Match": '"1"'},
     )
     assert edited.status_code == 200
     data = edited.json()["data"]

@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi import APIRouter, Depends, Header, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from incident_desk.authz import Permission, role_has
 from incident_desk.config import get_settings
 from incident_desk.db.engine import get_db_session
 from incident_desk.enums import IncidentStatus, Severity
+from incident_desk.errors import AppError
 from incident_desk.schemas.common import Data, Page
 from incident_desk.schemas.incidents import (
     AttachmentOut,
@@ -25,8 +26,8 @@ from incident_desk.schemas.incidents import (
 )
 from incident_desk.services import attachments as attachment_service
 from incident_desk.services import comments as comment_service
+from incident_desk.services import idempotency, timeline
 from incident_desk.services import incidents as incident_service
-from incident_desk.services import timeline
 
 router = APIRouter(prefix="/orgs/{org_slug}/incidents", tags=["incidents"])
 
@@ -36,17 +37,60 @@ CreateCtx = Annotated[AuthContext, Depends(require(Permission.INCIDENT_CREATE))]
 UpdateCtx = Annotated[AuthContext, Depends(require(Permission.INCIDENT_UPDATE))]
 
 
+class PreconditionRequiredError(AppError):
+    status_code = 428
+    code = "precondition_required"
+
+
+class InvalidPreconditionError(AppError):
+    status_code = 400
+    code = "invalid_precondition"
+
+
+def _parse_if_match(value: str) -> int:
+    """Accepts '3', '\"3\"', or 'W/\"3\"'."""
+    cleaned = value.strip().removeprefix("W/").strip().strip('"')
+    if not cleaned.isdigit():
+        raise InvalidPreconditionError("If-Match must carry the incident's version ETag")
+    return int(cleaned)
+
+
+def _etag(version: int) -> str:
+    return f'"{version}"'
+
+
+def _replay(stored_status: int, stored_body: str) -> Response:
+    return Response(
+        content=stored_body,
+        status_code=stored_status,
+        media_type="application/json",
+        headers={"Idempotency-Replayed": "true"},
+    )
+
+
 @router.post(
     "",
     status_code=201,
+    response_model=Data[IncidentOut],
     summary="Report an incident",
     description=(
-        "Creates the incident with the organisation's next gapless number (INC-1, INC-2, ...)."
+        "Creates the incident with the organisation's next gapless number "
+        "(INC-1, INC-2, ...). Send an Idempotency-Key header to make retries "
+        "safe: the same key returns the original response instead of "
+        "creating a duplicate."
     ),
 )
 async def create_incident(
-    payload: IncidentCreate, ctx: CreateCtx, session: SessionDep
-) -> Data[IncidentOut]:
+    payload: IncidentCreate,
+    ctx: CreateCtx,
+    session: SessionDep,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=200)] = None,
+) -> Response:
+    if idempotency_key is not None:
+        existing = await idempotency.stored_response(session, ctx.org.id, idempotency_key)
+        if existing is not None:
+            return _replay(existing.status_code, existing.response_body)
+
     incident = await incident_service.create_incident(
         session,
         ctx.org,
@@ -59,8 +103,16 @@ async def create_incident(
         started_at=payload.started_at,
         tags=payload.tags,
     )
+    body = Data(data=IncidentOut.model_validate(incident)).model_dump_json()
+
+    if idempotency_key is not None:
+        winner = await idempotency.store(session, ctx.org.id, idempotency_key, 201, body)
+        if winner is not None:
+            # A concurrent retry won the key: discard our incident, replay theirs.
+            await session.rollback()
+            return _replay(winner.status_code, winner.response_body)
     await session.commit()
-    return Data(data=IncidentOut.model_validate(incident))
+    return Response(content=body, status_code=201, media_type="application/json")
 
 
 @router.get(
@@ -102,8 +154,11 @@ async def list_incidents(
 
 
 @router.get("/{incident_id}", summary="Get an incident")
-async def get_incident(incident_id: UUID, ctx: ViewCtx, session: SessionDep) -> Data[IncidentOut]:
+async def get_incident(
+    incident_id: UUID, ctx: ViewCtx, session: SessionDep, response: Response
+) -> Data[IncidentOut]:
     incident = await incident_service.get_incident(session, ctx.org, incident_id)
+    response.headers["ETag"] = _etag(incident.version)
     return Data(data=IncidentOut.model_validate(incident))
 
 
@@ -134,11 +189,22 @@ async def change_status(
 @router.patch(
     "/{incident_id}",
     summary="Edit an incident",
-    description="Field edits; every change is recorded on the timeline.",
+    description=(
+        "Field edits; every change is recorded on the timeline. Requires an "
+        "If-Match header with the version ETag from the last read; a stale "
+        "version answers 409 with the server's current state."
+    ),
 )
 async def update_incident(
-    incident_id: UUID, payload: IncidentUpdate, ctx: UpdateCtx, session: SessionDep
+    incident_id: UUID,
+    payload: IncidentUpdate,
+    ctx: UpdateCtx,
+    session: SessionDep,
+    response: Response,
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> Data[IncidentOut]:
+    if if_match is None:
+        raise PreconditionRequiredError("Send the If-Match header with the version you last read")
     incident = await incident_service.update_incident(
         session,
         ctx.org,
@@ -150,8 +216,10 @@ async def update_incident(
         tags=payload.tags,
         assigned_to=payload.assigned_to,
         assignee_provided="assigned_to" in payload.model_fields_set,
+        expected_version=_parse_if_match(if_match),
     )
     await session.commit()
+    response.headers["ETag"] = _etag(incident.version)
     return Data(data=IncidentOut.model_validate(incident))
 
 

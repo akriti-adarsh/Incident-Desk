@@ -40,6 +40,7 @@ class IncidentOut(BaseModel):
     resolved_at: datetime | None
     resolution_summary: str | None
     tags: list[str]
+    version: int = Field(description="Optimistic concurrency version; also served as the ETag")
     created_at: datetime
     updated_at: datetime
 

@@ -26,6 +26,25 @@ class ResolutionSummaryRequiredError(AppError):
     code = "resolution_required"
 
 
+class VersionConflictError(ConflictError):
+    code = "version_conflict"
+
+
+def _conflict_snapshot(incident: models.Incident) -> dict[str, object]:
+    """What the server has now, so a conflicting client can show the diff."""
+    return {
+        "current_version": incident.version,
+        "current": {
+            "title": incident.title,
+            "description": incident.description,
+            "severity": incident.severity.value,
+            "status": incident.status.value,
+            "assigned_to": str(incident.assigned_to) if incident.assigned_to else None,
+            "tags": incident.tags,
+        },
+    }
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -152,6 +171,7 @@ async def transition_status(
 
     previous = incident.status
     incident.status = new_status
+    incident.version += 1
     if new_status is IncidentStatus.ACKNOWLEDGED and incident.acknowledged_at is None:
         incident.acknowledged_at = _now()
     if new_status is IncidentStatus.RESOLVED:
@@ -180,9 +200,20 @@ async def update_incident(
     tags: list[str] | None = None,
     assigned_to: UUID | None = None,
     assignee_provided: bool = False,
+    expected_version: int | None = None,
 ) -> models.Incident:
-    """Field updates, each recorded on the timeline."""
+    """Field updates, each recorded on the timeline.
+
+    When ``expected_version`` is given (the If-Match ETag), a mismatch means
+    someone else changed the incident since the client read it: 409 with the
+    server's current state so the client can show what changed.
+    """
     incident = await get_incident(session, org, incident_id)
+    if expected_version is not None and incident.version != expected_version:
+        raise VersionConflictError(
+            "The incident changed since you loaded it",
+            details=_conflict_snapshot(incident),
+        )
     edited_fields: list[str] = []
 
     if severity is not None and severity != incident.severity:
@@ -220,6 +251,7 @@ async def update_incident(
             event_type="incident.updated",
             payload={"fields": edited_fields},
         )
+    incident.version += 1
     await session.flush()
     return incident
 

@@ -152,6 +152,9 @@ class Incident(TimestampMixin, Base):
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default=text("'{}'::text[]")
     )
+    # Optimistic concurrency: bumped on every mutation; clients send the
+    # version they saw as an If-Match ETag and conflicting writes get a 409.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     # Kept in step by Postgres itself (generated column); GIN-indexed for
     # full-text search over title + description.
     search_vector: Mapped[str | None] = mapped_column(
@@ -386,6 +389,23 @@ class PasswordResetToken(TimestampMixin, Base):
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class IdempotencyKey(TimestampMixin, Base):
+    """Stored response for a creation request, replayed byte-for-byte on retry.
+
+    Written in the same transaction as the created resource, so either both
+    exist or neither does. Pruned after 24 hours by the retention job.
+    """
+
+    __tablename__ = "idempotency_keys"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True
+    )
+    key: Mapped[str] = mapped_column(String(200), primary_key=True)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    response_body: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class OrganizationCounter(TimestampMixin, Base):
