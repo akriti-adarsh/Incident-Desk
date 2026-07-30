@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +14,9 @@ from incident_desk.api.v1.router import api_v1_router
 from incident_desk.config import get_settings
 from incident_desk.db.engine import create_engine, create_sessionmaker, get_db_session
 from incident_desk.errors import AppError, register_error_handlers
+from incident_desk.logging_setup import AccessLogMiddleware, configure_logging
 from incident_desk.middleware import RequestIDMiddleware
+from incident_desk.ratelimit import SlidingWindowLimiter
 
 
 class NotReadyError(AppError):
@@ -44,17 +47,23 @@ async def ready(session: Annotated[AsyncSession, Depends(get_db_session)]) -> di
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     engine = create_engine(settings.database_url)
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.engine = engine
     app.state.sessionmaker = create_sessionmaker(engine)
+    app.state.redis = redis
+    app.state.rate_limiter = SlidingWindowLimiter(redis, settings.rate_limit_namespace)
     try:
         yield
     finally:
+        await redis.aclose()
         await engine.dispose()
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(json_output=settings.environment == "prod")
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
+    app.add_middleware(AccessLogMiddleware)
     app.add_middleware(RequestIDMiddleware)
     register_error_handlers(app)
     app.include_router(health_router)

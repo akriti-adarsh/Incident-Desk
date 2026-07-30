@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     attachments_dir: str = "var/attachments"
     attachment_max_bytes: int = 25 * 1024 * 1024
 
+    # Sliding-window rate limits (requests per minute). Keying follows the
+    # route class: per-user on JWT routes, per-key on API-key routes, per-IP
+    # on the unauthenticated auth endpoints, with login in a stricter bucket.
+    rate_limit_per_minute: int = 300
+    rate_limit_auth_per_minute: int = 60
+    rate_limit_login_per_minute: int = 10
+    rate_limit_namespace: str = "rl"
+
     smtp_host: str = "localhost"
     smtp_port: int = 58025
     email_from: str = "incident-desk <no-reply@incident-desk.local>"

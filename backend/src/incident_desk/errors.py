@@ -25,10 +25,17 @@ class AppError(Exception):
     status_code: ClassVar[int] = 500
     code: ClassVar[str] = "internal_error"
 
-    def __init__(self, message: str, *, details: Any | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: Any | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.details = details
+        self.headers = headers
 
 
 class UnauthorizedError(AppError):
@@ -64,18 +71,22 @@ _STATUS_CODES = {
 
 
 def error_response(
-    status_code: int, code: str, message: str, details: Any | None = None
+    status_code: int,
+    code: str,
+    message: str,
+    details: Any | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     error: dict[str, Any] = {"code": code, "message": message, "request_id": get_request_id()}
     if details is not None:
         error["details"] = details
-    return JSONResponse(status_code=status_code, content={"error": error})
+    return JSONResponse(status_code=status_code, content={"error": error}, headers=headers)
 
 
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
-        return error_response(exc.status_code, exc.code, exc.message, exc.details)
+        return error_response(exc.status_code, exc.code, exc.message, exc.details, exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(

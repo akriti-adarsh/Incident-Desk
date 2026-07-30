@@ -1,7 +1,8 @@
-"""Aggregate router for ``/api/v1``."""
+"""Aggregate router for ``/api/v1``. Every route passes the rate limiter."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from incident_desk.api.ratelimit_dep import rate_limiter
 from incident_desk.api.v1 import (
     apikeys,
     audit,
@@ -14,7 +15,7 @@ from incident_desk.api.v1 import (
     services,
 )
 
-api_v1_router = APIRouter(prefix="/api/v1")
+api_v1_router = APIRouter(prefix="/api/v1", dependencies=[Depends(rate_limiter)])
 api_v1_router.include_router(auth.router)
 api_v1_router.include_router(orgs.router)
 api_v1_router.include_router(members.router)

@@ -13,6 +13,7 @@ Strategy (docs/BUILD_SPEC.md section 15, "Async SQLAlchemy + test isolation"):
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import psycopg
@@ -118,6 +119,11 @@ async def app(
 
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("ATTACHMENTS_DIR", str(tmp_path / "attachments"))
+    # Rate-limit isolation: a fresh namespace per test keeps Redis windows
+    # from bleeding between tests, and the login bucket gets headroom (the
+    # dedicated rate-limit tests dial limits down explicitly).
+    monkeypatch.setenv("RATE_LIMIT_NAMESPACE", f"rl-test-{uuid4().hex[:12]}")
+    monkeypatch.setenv("RATE_LIMIT_LOGIN_PER_MINUTE", "500")
     get_settings.cache_clear()
     application = create_app()
 
