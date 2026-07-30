@@ -18,12 +18,11 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 12 of 39. Last completed: "feat(api): incidents with gapless per-org sequence"
-- Suite at last commit: backend "194 passed" · Coverage: 97.22% · frontend "1 passed"
-- Open deviations: 0 · Next up: commits 13–20
+- Plan position: 13 of 39. Last completed: "test: concurrent sequence generation"
+- Suite at last commit: backend "196 passed" · Coverage: 97.22% · frontend "1 passed"
+- Open deviations: 0 · Next up: commits 14–20
 - Notes: session B in progress. Test plumbing: per-request savepoint sessions on one
   outer connection (conftest); services use begin_nested around risky flushes;
   Base has eager_defaults=True so onupdate timestamps come back via RETURNING.
   Route enumeration via tests/route_table.py (FastAPI defers router inclusion).
 - Note: coverage needs concurrency=["thread","greenlet"] or lines after awaited DB calls vanish
-- Notes for next session: session A in progress
