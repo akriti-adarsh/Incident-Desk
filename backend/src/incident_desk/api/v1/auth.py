@@ -10,13 +10,17 @@ from incident_desk.config import get_settings
 from incident_desk.db import models
 from incident_desk.db.engine import get_db_session
 from incident_desk.schemas.auth import (
+    LoginRequest,
+    LogoutRequest,
+    RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    TokenPairOut,
     UserOut,
     VerifyEmailRequest,
 )
 from incident_desk.schemas.common import Data
-from incident_desk.services import auth_service
+from incident_desk.services import auth_service, sessions
 from incident_desk.services.emails import EmailSender
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -57,6 +61,60 @@ async def verify_email(payload: VerifyEmailRequest, session: SessionDep) -> Data
     user = await auth_service.verify_email(session, payload.token)
     await session.commit()
     return Data(data=UserOut.model_validate(user))
+
+
+@router.post(
+    "/login",
+    summary="Log in",
+    description="Returns a 15-minute access JWT and a single-use rotating refresh token.",
+)
+async def login(payload: LoginRequest, session: SessionDep) -> Data[TokenPairOut]:
+    user = await sessions.authenticate(session, email=payload.email, password=payload.password)
+    tokens = await sessions.issue_session(session, get_settings(), user)
+    await session.commit()
+    return Data(
+        data=TokenPairOut(
+            access_token=tokens.access_token,
+            refresh_token=tokens.refresh_token,
+            expires_in=tokens.expires_in,
+        )
+    )
+
+
+@router.post(
+    "/refresh",
+    summary="Rotate the refresh token",
+    description=(
+        "Consumes the presented refresh token and returns a new token pair in the "
+        "same family. Reusing an already-consumed token revokes the entire family."
+    ),
+)
+async def refresh(payload: RefreshRequest, session: SessionDep) -> Data[TokenPairOut]:
+    try:
+        tokens = await sessions.rotate_refresh(session, get_settings(), payload.refresh_token)
+    except sessions.RefreshReusedError:
+        # The theft response (revoking the family) must survive the 401.
+        await session.commit()
+        raise
+    await session.commit()
+    return Data(
+        data=TokenPairOut(
+            access_token=tokens.access_token,
+            refresh_token=tokens.refresh_token,
+            expires_in=tokens.expires_in,
+        )
+    )
+
+
+@router.post(
+    "/logout",
+    status_code=204,
+    summary="Log out",
+    description="Revokes the refresh-token family of the presented token. Idempotent.",
+)
+async def logout(payload: LogoutRequest, session: SessionDep) -> None:
+    await sessions.revoke_session(session, payload.refresh_token)
+    await session.commit()
 
 
 @router.post(

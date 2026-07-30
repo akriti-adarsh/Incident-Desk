@@ -69,6 +69,10 @@ class User(TimestampMixin, Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     mfa_secret: Mapped[str | None] = mapped_column(String(100))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Bumped to invalidate every outstanding access token for this user
+    # (password reset, forced logout). Access JWTs carry the version they
+    # were minted with; a mismatch is a 401.
+    token_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
 
 class Membership(TimestampMixin, Base):
@@ -265,6 +269,27 @@ class ApiKey(TimestampMixin, Base):
     )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RefreshToken(TimestampMixin, Base):
+    """One link in a rotating refresh-token family.
+
+    ``family_id`` names the lineage started at login. Rotation consumes the
+    presented token and issues the next link; presenting an already-consumed
+    token is treated as theft and revokes the whole family.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    family_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

@@ -59,3 +59,23 @@ class VerifyEmailRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1)
+
+
+class TokenPairOut(BaseModel):
+    access_token: str = Field(description="JWT for the Authorization header; expires quickly")
+    refresh_token: str = Field(description="Single-use token for POST /auth/refresh")
+    token_type: str = "bearer"
+    expires_in: int = Field(description="Access token lifetime in seconds")
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
