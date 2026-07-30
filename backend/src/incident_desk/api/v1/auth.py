@@ -6,12 +6,19 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from incident_desk.api.deps import CurrentUser
 from incident_desk.config import get_settings
 from incident_desk.db import models
 from incident_desk.db.engine import get_db_session
 from incident_desk.schemas.auth import (
     LoginRequest,
+    LoginResult,
     LogoutRequest,
+    MfaChallengeRequest,
+    MfaCodeRequest,
+    MfaEnrollConfirmOut,
+    MfaEnrollOut,
+    MfaRequiredOut,
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
@@ -20,7 +27,8 @@ from incident_desk.schemas.auth import (
     VerifyEmailRequest,
 )
 from incident_desk.schemas.common import Data
-from incident_desk.services import auth_service, sessions
+from incident_desk.security.jwt import create_mfa_token
+from incident_desk.services import auth_service, mfa, sessions
 from incident_desk.services.emails import EmailSender
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -63,22 +71,75 @@ async def verify_email(payload: VerifyEmailRequest, session: SessionDep) -> Data
     return Data(data=UserOut.model_validate(user))
 
 
+def _token_pair(tokens: sessions.SessionTokens) -> TokenPairOut:
+    return TokenPairOut(
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        expires_in=tokens.expires_in,
+    )
+
+
 @router.post(
     "/login",
     summary="Log in",
-    description="Returns a 15-minute access JWT and a single-use rotating refresh token.",
+    description=(
+        "Returns a 15-minute access JWT and a single-use rotating refresh token. "
+        "Accounts with MFA enabled instead receive a short-lived mfa_token to "
+        "present to /auth/mfa/challenge."
+    ),
 )
-async def login(payload: LoginRequest, session: SessionDep) -> Data[TokenPairOut]:
+async def login(payload: LoginRequest, session: SessionDep) -> Data[LoginResult]:
     user = await sessions.authenticate(session, email=payload.email, password=payload.password)
+    if user.mfa_enabled_at is not None:
+        token = create_mfa_token(get_settings(), user_id=user.id, token_version=user.token_version)
+        return Data[LoginResult](data=MfaRequiredOut(mfa_token=token))
     tokens = await sessions.issue_session(session, get_settings(), user)
     await session.commit()
-    return Data(
-        data=TokenPairOut(
-            access_token=tokens.access_token,
-            refresh_token=tokens.refresh_token,
-            expires_in=tokens.expires_in,
-        )
+    return Data[LoginResult](data=_token_pair(tokens))
+
+
+@router.post(
+    "/mfa/enroll",
+    status_code=201,
+    summary="Start MFA enrolment",
+    description=(
+        "Creates a pending TOTP secret. MFA is not enforced until a code from "
+        "the authenticator is confirmed via /auth/mfa/verify."
+    ),
+)
+async def mfa_enroll(user: CurrentUser, session: SessionDep) -> Data[MfaEnrollOut]:
+    secret, uri = await mfa.start_enrollment(session, get_settings(), user)
+    await session.commit()
+    return Data(data=MfaEnrollOut(secret=secret, otpauth_uri=uri))
+
+
+@router.post(
+    "/mfa/verify",
+    summary="Confirm MFA enrolment",
+    description=(
+        "Verifies the first authenticator code, enables MFA, and returns the "
+        "recovery codes. They are shown exactly once."
+    ),
+)
+async def mfa_verify(
+    payload: MfaCodeRequest, user: CurrentUser, session: SessionDep
+) -> Data[MfaEnrollConfirmOut]:
+    codes = await mfa.confirm_enrollment(session, user, payload.code)
+    await session.commit()
+    return Data(data=MfaEnrollConfirmOut(recovery_codes=codes))
+
+
+@router.post(
+    "/mfa/challenge",
+    summary="Complete an MFA login",
+    description="Exchanges the mfa_token from login plus a valid code for a session.",
+)
+async def mfa_challenge(payload: MfaChallengeRequest, session: SessionDep) -> Data[TokenPairOut]:
+    tokens = await mfa.complete_challenge(
+        session, get_settings(), mfa_token=payload.mfa_token, code=payload.code
     )
+    await session.commit()
+    return Data(data=_token_pair(tokens))
 
 
 @router.post(

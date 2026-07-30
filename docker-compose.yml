@@ -44,7 +44,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
-      JWT_SECRET: dev-only-secret-change-in-prod
+      JWT_SECRET: dev-only-secret-change-in-production-use-32B+
     ports:
       - "8000:8000"
     depends_on:

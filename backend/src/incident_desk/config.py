@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     sync_database_url: str = "postgresql+psycopg://incident:incident@localhost:55433/incident_desk"
     redis_url: str = "redis://localhost:56379/0"
 
-    jwt_secret: str = "dev-only-secret-change-in-prod"
+    # HS256 needs >= 32 bytes of key material (RFC 7518 section 3.2).
+    jwt_secret: str = "dev-only-secret-change-in-production-use-32B+"
     jwt_issuer: str = "incident-desk"
     jwt_audience: str = "incident-desk-api"
     access_token_ttl_seconds: int = 15 * 60

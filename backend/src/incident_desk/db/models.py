@@ -67,7 +67,13 @@ class User(TimestampMixin, Base):
     avatar_url: Mapped[str | None] = mapped_column(String(500))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # TOTP enrolment is two-phase: a pending secret exists once enrolment
+    # starts, but MFA is enforced only after the first valid code confirms it
+    # (mfa_enabled_at set). mfa_last_counter records the last accepted TOTP
+    # timestep so a captured code cannot be replayed inside its window.
     mfa_secret: Mapped[str | None] = mapped_column(String(100))
+    mfa_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    mfa_last_counter: Mapped[int | None] = mapped_column(Integer)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Bumped to invalidate every outstanding access token for this user
     # (password reset, forced logout). Access JWTs carry the version they
@@ -291,6 +297,19 @@ class RefreshToken(TimestampMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MfaRecoveryCode(TimestampMixin, Base):
+    """Single-use fallback codes for a user who lost their authenticator."""
+
+    __tablename__ = "mfa_recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class EmailVerificationToken(TimestampMixin, Base):

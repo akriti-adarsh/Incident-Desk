@@ -18,8 +18,8 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 6 of 39. Last completed: "test: refresh token reuse detection"
-- Suite at last commit: backend "47 passed" · Coverage: 98.38% · frontend "1 passed"
-- Open deviations: 0 · Next up: commits 7–10
+- Plan position: 7 of 39. Last completed: "feat(auth): totp mfa with recovery codes"
+- Suite at last commit: backend "57 passed" · Coverage: 98.09% · frontend "1 passed"
+- Open deviations: 0 · Next up: commits 8–10
 - Note: coverage needs concurrency=["thread","greenlet"] or lines after awaited DB calls vanish
 - Notes for next session: session A in progress

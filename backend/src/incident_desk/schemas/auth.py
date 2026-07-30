@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -71,6 +72,38 @@ class TokenPairOut(BaseModel):
     refresh_token: str = Field(description="Single-use token for POST /auth/refresh")
     token_type: str = "bearer"
     expires_in: int = Field(description="Access token lifetime in seconds")
+
+
+class MfaRequiredOut(BaseModel):
+    mfa_required: Literal[True] = True
+    mfa_token: str = Field(
+        description="Present to /auth/mfa/challenge with a TOTP or recovery code within 5 minutes"
+    )
+
+
+LoginResult = TokenPairOut | MfaRequiredOut
+
+
+class MfaEnrollOut(BaseModel):
+    secret: str = Field(description="Base32 TOTP secret; also embedded in the URI")
+    otpauth_uri: str = Field(description="Render as a QR code for the authenticator app")
+
+
+class MfaCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=20, description="6-digit TOTP code")
+
+
+class MfaEnrollConfirmOut(BaseModel):
+    recovery_codes: list[str] = Field(
+        description="Shown exactly once; each code works a single time"
+    )
+
+
+class MfaChallengeRequest(BaseModel):
+    mfa_token: str = Field(min_length=1)
+    code: str = Field(
+        min_length=6, max_length=20, description="6-digit TOTP code or a recovery code"
+    )
 
 
 class RefreshRequest(BaseModel):
