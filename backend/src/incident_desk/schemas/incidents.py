@@ -76,3 +76,29 @@ class EventOut(BaseModel):
     actor_id: uuid.UUID | None
     payload: dict[str, Any]
     created_at: datetime
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=20000, description="Markdown")
+
+
+class CommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    author_id: uuid.UUID
+    body: str
+    edited_at: datetime | None
+    created_at: datetime
+
+
+class AttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    filename: str
+    content_type: str
+    size_bytes: int
+    checksum: str = Field(description="SHA-256 of the stored bytes")
+    uploader_id: uuid.UUID
+    created_at: datetime

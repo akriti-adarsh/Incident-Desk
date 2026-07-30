@@ -174,8 +174,11 @@ class IncidentEvent(TimestampMixin, Base):
 
 class Comment(TimestampMixin, Base):
     __tablename__ = "comments"
+    __table_args__ = (Index("ix_comments_incident_id_seq", "incident_id", "seq"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    # Monotonic insert order; see IncidentEvent.seq for why timestamps are not enough.
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), nullable=False)
     incident_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True
     )

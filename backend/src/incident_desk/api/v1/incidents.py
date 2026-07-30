@@ -3,20 +3,27 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.api.authz import AuthContext, require
-from incident_desk.authz import Permission
+from incident_desk.authz import Permission, role_has
+from incident_desk.config import get_settings
 from incident_desk.db.engine import get_db_session
 from incident_desk.schemas.common import Data
 from incident_desk.schemas.incidents import (
+    AttachmentOut,
+    CommentCreate,
+    CommentOut,
     EventOut,
     IncidentCreate,
     IncidentOut,
     IncidentUpdate,
     StatusChangeRequest,
 )
+from incident_desk.services import attachments as attachment_service
+from incident_desk.services import comments as comment_service
 from incident_desk.services import incidents as incident_service
 from incident_desk.services import timeline
 
@@ -124,3 +131,107 @@ async def list_events(incident_id: UUID, ctx: ViewCtx, session: SessionDep) -> D
     incident = await incident_service.get_incident(session, ctx.org, incident_id)
     events = await timeline.list_events(session, incident.id)
     return Data(data=[EventOut.model_validate(e) for e in events])
+
+
+CommentCtx = Annotated[AuthContext, Depends(require(Permission.COMMENT_CREATE))]
+UploadCtx = Annotated[AuthContext, Depends(require(Permission.ATTACHMENT_UPLOAD))]
+
+
+@router.get("/{incident_id}/comments", summary="List comments")
+async def list_comments(
+    incident_id: UUID, ctx: ViewCtx, session: SessionDep
+) -> Data[list[CommentOut]]:
+    comments = await comment_service.list_comments(session, ctx.org, incident_id)
+    return Data(data=[CommentOut.model_validate(c) for c in comments])
+
+
+@router.post("/{incident_id}/comments", status_code=201, summary="Add a comment")
+async def add_comment(
+    incident_id: UUID, payload: CommentCreate, ctx: CommentCtx, session: SessionDep
+) -> Data[CommentOut]:
+    comment = await comment_service.add_comment(
+        session, ctx.org, incident_id, author=ctx.user, body=payload.body
+    )
+    await session.commit()
+    return Data(data=CommentOut.model_validate(comment))
+
+
+@router.patch(
+    "/{incident_id}/comments/{comment_id}",
+    summary="Edit a comment",
+    description="Author only; the comment is marked as edited.",
+)
+async def edit_comment(
+    incident_id: UUID,
+    comment_id: UUID,
+    payload: CommentCreate,
+    ctx: CommentCtx,
+    session: SessionDep,
+) -> Data[CommentOut]:
+    comment = await comment_service.edit_comment(
+        session, ctx.org, incident_id, comment_id, actor=ctx.user, body=payload.body
+    )
+    await session.commit()
+    return Data(data=CommentOut.model_validate(comment))
+
+
+@router.delete(
+    "/{incident_id}/comments/{comment_id}",
+    status_code=204,
+    summary="Delete a comment",
+    description="Soft delete by the author, or by an admin (comment moderation).",
+)
+async def delete_comment(
+    incident_id: UUID, comment_id: UUID, ctx: CommentCtx, session: SessionDep
+) -> None:
+    await comment_service.delete_comment(
+        session,
+        ctx.org,
+        incident_id,
+        comment_id,
+        actor=ctx.user,
+        can_moderate=role_has(ctx.role, Permission.COMMENT_MODERATE),
+    )
+    await session.commit()
+
+
+@router.get("/{incident_id}/attachments", summary="List attachments")
+async def list_attachments(
+    incident_id: UUID, ctx: ViewCtx, session: SessionDep
+) -> Data[list[AttachmentOut]]:
+    attachments = await attachment_service.list_attachments(session, ctx.org, incident_id)
+    return Data(data=[AttachmentOut.model_validate(a) for a in attachments])
+
+
+@router.post(
+    "/{incident_id}/attachments",
+    status_code=201,
+    summary="Upload an attachment",
+    description="Multipart upload, streamed to storage with a SHA-256 checksum.",
+)
+async def upload_attachment(
+    incident_id: UUID, file: UploadFile, ctx: UploadCtx, session: SessionDep
+) -> Data[AttachmentOut]:
+    attachment = await attachment_service.save_attachment(
+        session, get_settings(), ctx.org, incident_id, uploader=ctx.user, upload=file
+    )
+    await session.commit()
+    return Data(data=AttachmentOut.model_validate(attachment))
+
+
+@router.get(
+    "/{incident_id}/attachments/{attachment_id}/download",
+    summary="Download an attachment",
+    response_class=FileResponse,
+)
+async def download_attachment(
+    incident_id: UUID, attachment_id: UUID, ctx: ViewCtx, session: SessionDep
+) -> FileResponse:
+    attachment = await attachment_service.get_attachment(
+        session, ctx.org, incident_id, attachment_id
+    )
+    return FileResponse(
+        attachment_service.storage_path(get_settings(), attachment.storage_key),
+        media_type=attachment.content_type,
+        filename=attachment.filename,
+    )

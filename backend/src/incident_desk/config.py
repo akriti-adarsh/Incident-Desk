@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     access_token_ttl_seconds: int = 15 * 60
     refresh_token_ttl_days: int = 30
 
+    attachments_dir: str = "var/attachments"
+    attachment_max_bytes: int = 25 * 1024 * 1024
+
     smtp_host: str = "localhost"
     smtp_port: int = 58025
     email_from: str = "incident-desk <no-reply@incident-desk.local>"

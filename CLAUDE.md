@@ -18,9 +18,9 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 14 of 39. Last completed: "feat(api): timeline events and state machine transitions"
-- Suite at last commit: backend "231 passed" · Coverage: 97.45% · frontend "1 passed"
-- Open deviations: 0 · Next up: commits 15–20
+- Plan position: 15 of 39. Last completed: "feat(api): comments and attachments"
+- Suite at last commit: backend "249 passed" · Coverage: 97.61% · frontend "1 passed"
+- Open deviations: 0 · Next up: commits 16–20
 - Notes: session B in progress. Test plumbing: per-request savepoint sessions on one
   outer connection (conftest); services use begin_nested around risky flushes;
   Base has eager_defaults=True so onupdate timestamps come back via RETURNING.

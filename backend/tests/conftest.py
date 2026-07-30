@@ -109,11 +109,15 @@ async def db_session(db_conn: AsyncConnection) -> AsyncIterator[AsyncSession]:
 
 @pytest.fixture
 async def app(
-    database_url: str, db_conn: AsyncConnection, monkeypatch: pytest.MonkeyPatch
+    database_url: str,
+    db_conn: AsyncConnection,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> AsyncIterator[FastAPI]:
     from incident_desk.main import create_app
 
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("ATTACHMENTS_DIR", str(tmp_path / "attachments"))
     get_settings.cache_clear()
     application = create_app()
 
