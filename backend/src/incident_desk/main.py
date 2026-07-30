@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk import __version__
+from incident_desk.api.v1.router import api_v1_router
 from incident_desk.config import get_settings
 from incident_desk.db.engine import create_engine, create_sessionmaker, get_db_session
 from incident_desk.errors import AppError, register_error_handlers
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIDMiddleware)
     register_error_handlers(app)
     app.include_router(health_router)
+    app.include_router(api_v1_router)
     return app
 
 

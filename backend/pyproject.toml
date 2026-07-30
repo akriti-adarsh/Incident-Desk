@@ -57,6 +57,11 @@ files = ["src", "tests"]
 init_forbid_extra = true
 init_typed = true
 
+[tool.coverage.run]
+# SQLAlchemy's asyncio layer switches greenlets internally; without this,
+# coverage silently loses every line that follows an awaited DB call.
+concurrency = ["thread", "greenlet"]
+
 [tool.pytest.ini_options]
 addopts = "-q --cov=incident_desk --cov-report=term-missing --cov-fail-under=85"
 testpaths = ["tests"]
