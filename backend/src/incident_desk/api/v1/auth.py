@@ -11,6 +11,7 @@ from incident_desk.config import get_settings
 from incident_desk.db import models
 from incident_desk.db.engine import get_db_session
 from incident_desk.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResult,
     LogoutRequest,
@@ -22,6 +23,7 @@ from incident_desk.schemas.auth import (
     RefreshRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenPairOut,
     UserOut,
     VerifyEmailRequest,
@@ -176,6 +178,52 @@ async def refresh(payload: RefreshRequest, session: SessionDep) -> Data[TokenPai
 async def logout(payload: LogoutRequest, session: SessionDep) -> None:
     await sessions.revoke_session(session, payload.refresh_token)
     await session.commit()
+
+
+@router.get(
+    "/me",
+    summary="The authenticated user",
+    description="Returns the account behind the presented access token.",
+)
+async def me(user: CurrentUser) -> Data[UserOut]:
+    return Data(data=UserOut.model_validate(user))
+
+
+@router.post(
+    "/forgot-password",
+    status_code=202,
+    summary="Request a password reset",
+    description=(
+        "Always responds 202. If the address belongs to an active account, a "
+        "reset link valid for 30 minutes is emailed; the response never reveals "
+        "whether an account exists."
+    ),
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest, session: SessionDep, sender: SenderDep
+) -> Data[dict[str, str]]:
+    email = auth_service.normalize_email(payload.email)
+    user = await session.scalar(select(models.User).where(models.User.email == email))
+    if user is not None and user.is_active:
+        token = await auth_service.issue_password_reset_token(session, user)
+        await session.commit()
+        await sender.send_password_reset_email(to=user.email, token=token)
+    return Data(data={"status": "accepted"})
+
+
+@router.post(
+    "/reset-password",
+    summary="Set a new password",
+    description=(
+        "Consumes a reset token, sets the new password, and logs the account "
+        "out everywhere: refresh tokens are revoked and outstanding access "
+        "tokens stop validating."
+    ),
+)
+async def reset_password(payload: ResetPasswordRequest, session: SessionDep) -> Data[UserOut]:
+    user = await auth_service.reset_password(session, payload.token, payload.password)
+    await session.commit()
+    return Data(data=UserOut.model_validate(user))
 
 
 @router.post(

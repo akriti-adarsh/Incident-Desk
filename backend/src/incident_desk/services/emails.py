@@ -39,3 +39,16 @@ class EmailSender:
                 "If you did not create an account, ignore this email."
             ),
         )
+
+    async def send_password_reset_email(self, *, to: str, token: str) -> None:
+        link = f"{self._settings.frontend_base_url}/reset-password?token={token}"
+        await self.send(
+            to=to,
+            subject="Reset your incident-desk password",
+            body=(
+                "A password reset was requested for this account.\n\n"
+                f"Open this link within 30 minutes to set a new password: {link}\n\n"
+                "If you did not request a reset, ignore this email; your password "
+                "is unchanged."
+            ),
+        )

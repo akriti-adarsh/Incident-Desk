@@ -62,6 +62,20 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, description="Token from the reset email")
+    password: str = Field(description="The new password; same strength rules as registration")
+
+    @field_validator("password")
+    @classmethod
+    def _strong_password(cls, value: str) -> str:
+        return validate_password_strength(value)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)

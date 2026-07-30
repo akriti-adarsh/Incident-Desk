@@ -1,4 +1,4 @@
-"""Registration and email verification flows."""
+"""Registration, email verification, and password reset flows."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -9,8 +9,10 @@ from incident_desk.db import models
 from incident_desk.errors import AppError, ConflictError
 from incident_desk.security.passwords import hash_password
 from incident_desk.security.tokens import generate_token, hash_token
+from incident_desk.services.sessions import revoke_all_sessions
 
 VERIFICATION_TTL = timedelta(hours=24)
+PASSWORD_RESET_TTL = timedelta(minutes=30)
 
 
 class EmailAlreadyRegisteredError(ConflictError):
@@ -74,4 +76,42 @@ async def verify_email(session: AsyncSession, raw_token: str) -> models.User:
     if user.email_verified_at is None:
         user.email_verified_at = _now()
     await session.flush()
+    return user
+
+
+async def issue_password_reset_token(session: AsyncSession, user: models.User) -> str:
+    raw = generate_token()
+    session.add(
+        models.PasswordResetToken(
+            user_id=user.id, token_hash=hash_token(raw), expires_at=_now() + PASSWORD_RESET_TTL
+        )
+    )
+    await session.flush()
+    return raw
+
+
+async def reset_password(session: AsyncSession, raw_token: str, new_password: str) -> models.User:
+    """Consume a reset token, set the new password, and kill every session.
+
+    Session invalidation covers both halves: refresh-token families are
+    revoked and the user's token_version is bumped so outstanding access
+    JWTs stop validating. Completing a reset also proves mailbox ownership,
+    so an unverified account becomes verified here.
+    """
+    token = await session.scalar(
+        select(models.PasswordResetToken).where(
+            models.PasswordResetToken.token_hash == hash_token(raw_token)
+        )
+    )
+    if token is None or token.consumed_at is not None or token.expires_at <= _now():
+        raise InvalidTokenError("Reset link is invalid or has expired")
+    user = await session.get(models.User, token.user_id)
+    if user is None or not user.is_active:
+        raise InvalidTokenError("Reset link is invalid or has expired")
+
+    token.consumed_at = _now()
+    user.password_hash = hash_password(new_password)
+    if user.email_verified_at is None:
+        user.email_verified_at = _now()
+    await revoke_all_sessions(session, user)
     return user
