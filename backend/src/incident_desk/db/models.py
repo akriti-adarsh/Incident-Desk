@@ -23,9 +23,10 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    literal_column,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from incident_desk.db.base import Base, TimestampMixin
@@ -205,7 +206,17 @@ class OnCallSchedule(TimestampMixin, Base):
 
 class OnCallShift(TimestampMixin, Base):
     __tablename__ = "on_call_shifts"
-    __table_args__ = (CheckConstraint("ends_at > starts_at", name="shift_ends_after_start"),)
+    __table_args__ = (
+        CheckConstraint("ends_at > starts_at", name="shift_ends_after_start"),
+        # Database-level guarantee that two shifts on one schedule never overlap.
+        # Requires btree_gist (created in the same migration as this constraint).
+        ExcludeConstraint(
+            (literal_column("schedule_id"), "="),
+            (literal_column("tstzrange(starts_at, ends_at)"), "&&"),
+            using="gist",
+            name="ex_on_call_shifts_no_overlap",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     schedule_id: Mapped[uuid.UUID] = mapped_column(

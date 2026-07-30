@@ -18,7 +18,7 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 2 of 39. Last completed: "feat(db): schema, migrations, and constraints"
-- Suite at last commit: backend "20 passed" · Coverage: 99.67% · frontend "1 passed"
-- Open deviations: 0 · Next up: commits 3–10
+- Plan position: 3 of 39. Last completed: "feat(db): on-call overlap exclusion constraint"
+- Suite at last commit: backend "24 passed" · Coverage: 99.67% · frontend "1 passed"
+- Open deviations: 0 · Next up: commits 4–10
 - Notes for next session: session A in progress
