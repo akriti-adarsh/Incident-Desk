@@ -119,8 +119,8 @@ async def seed(session: AsyncSession, rng: random.Random) -> None:
         orgs[slug] = org
     await session.flush()
 
-    for slug in orgs:
-        session.add(models.OrganizationCounter(org_id=orgs[slug].id))
+    counter_rows = {slug: models.OrganizationCounter(org_id=orgs[slug].id) for slug in orgs}
+    session.add_all(counter_rows.values())
     for _full, handle, memberships in PEOPLE:
         for slug, role in memberships:
             session.add(
@@ -239,6 +239,11 @@ async def seed(session: AsyncSession, rng: random.Random) -> None:
                 created_at=started,
             )
         )
+
+    # Advance each org's gapless counter past the seeded incidents, so the
+    # first app-created incident continues the sequence instead of colliding.
+    for slug, count in counters.items():
+        counter_rows[slug].incident_seq = count
 
     # On-call schedules with shifts covering the current week.
     week_start = now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(

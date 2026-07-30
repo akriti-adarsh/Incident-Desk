@@ -14,7 +14,7 @@ import {
 import { IncidentDetailPage } from './pages/IncidentDetail'
 import { IncidentsPage } from './pages/Incidents'
 import { MetricsPage } from './pages/Metrics'
-import { ForbiddenPage, NotFoundPage, OnboardingPage } from './pages/misc'
+import { AcceptInvitePage, ForbiddenPage, NotFoundPage, OnboardingPage } from './pages/misc'
 import { OnCallPage } from './pages/OnCall'
 import { SettingsPage } from './pages/Settings'
 import { setUnauthorizedHandler } from './api/client'
@@ -67,6 +67,7 @@ export default function App() {
       <Route path="/forgot-password" element={<Anonymous><ForgotPasswordPage /></Anonymous>} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/onboarding" element={<Protected><OnboardingPage /></Protected>} />
+      <Route path="/accept-invite" element={<Protected><AcceptInvitePage /></Protected>} />
 
       <Route path="/o/:orgSlug" element={<Protected><OrgRoutes /></Protected>}>
         <Route index element={<Navigate to="incidents" replace />} />

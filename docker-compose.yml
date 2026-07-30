@@ -48,6 +48,10 @@ services:
       CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
       FRONTEND_BASE_URL: "http://localhost:8080"
       SEED_ON_START: "true"
+      # The demo stack (and the E2E suite) logs in many times from one host;
+      # loosen the per-IP login bucket so that does not throttle. Production
+      # keeps the strict default (10/min).
+      RATE_LIMIT_LOGIN_PER_MINUTE: "200"
     ports:
       - "8000:8000"
     healthcheck:

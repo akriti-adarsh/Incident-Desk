@@ -81,6 +81,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         await websocket.close(code=4401)
         return
 
+    registry = websocket.app.state.ws_registry
+    registry.add(websocket)
     queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     subscribed: set[str] = set()
 
@@ -156,6 +158,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
+        registry.discard(websocket)
         # A dropped client cancels this task; the first IO await inside a
         # plain finally would die with CancelledError and abort cleanup.
         # Run cleanup in its own shielded task so departures always broadcast.

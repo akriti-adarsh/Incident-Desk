@@ -142,7 +142,7 @@ export function IncidentDetailPage() {
           {inc.description ? <p className="detail-desc">{inc.description}</p> : null}
           {timeline.isPending ? <Skeleton rows={4} /> : <Timeline events={timeline.data?.data ?? []} />}
 
-          <div className="comments" aria-label="Comments">
+          <section className="comments" aria-label="Comments">
             {(comments.data?.data ?? []).map((c) => (
               <div key={c.id} className={`comment ${c.id.startsWith('optimistic') ? 'comment-pending' : ''}`}>
                 <div className="comment-head">
@@ -152,7 +152,7 @@ export function IncidentDetailPage() {
                 <p className="comment-body">{c.body}</p>
               </div>
             ))}
-          </div>
+          </section>
 
           {can(role, 'comment:create') ? (
             <form

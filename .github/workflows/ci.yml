@@ -70,3 +70,47 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test
+
+  # Migration up/down/up and autogenerate-no-diff, plus the OpenAPI drift check,
+  # run inside the backend pytest job (tests/test_migration_drift.py and
+  # tests/test_openapi_drift.py). This job builds the images and runs the
+  # Playwright E2E suite (including the axe accessibility scan) against the
+  # built compose stack, not the dev servers, so it also validates the images.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the stack
+        run: docker compose up -d --build
+      - name: Wait for the API to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/health/ready; then echo ready; break; fi
+            sleep 3
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install E2E deps
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run Playwright E2E
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://localhost:8080
+          E2E_API_BASE: http://localhost:8000
+          E2E_MAILPIT: http://localhost:58026
+        run: npm run e2e
+      - name: Dump stack logs on failure
+        if: failure()
+        run: docker compose logs --tail 200
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

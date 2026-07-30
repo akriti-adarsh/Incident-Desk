@@ -13,27 +13,30 @@
   --border-strong: #445068;
 
   --ink: #e7ebf2;
-  --ink-muted: #9aa6ba;
-  --ink-faint: #6b7688;
+  --ink-muted: #aab4c6;
+  /* AA-compliant (>=4.5:1) against the card/surface backgrounds. */
+  --ink-faint: #98a3b6;
 
   --amber: #f2a63b;
   --amber-ink: #1b1405;
   --pulse: #3d8bff;
 
-  --sev1: #f0476b;
+  /* Severity and status hues, lifted just enough to clear WCAG AA (4.5:1)
+     as small text on the card/row surfaces while keeping the palette. */
+  --sev1: #f4627e;
   --sev2: #f2a63b;
-  --sev3: #3d8bff;
-  --sev4: #7d8798;
+  --sev3: #4f97ff;
+  --sev4: #8b95a6;
 
   --ok: #43c59e;
   --warn: #f2a63b;
-  --danger: #f0476b;
+  --danger: #f4627e;
 
-  --status-open: #f0476b;
+  --status-open: #f4627e;
   --status-acknowledged: #f2a63b;
-  --status-mitigated: #3d8bff;
+  --status-mitigated: #4f97ff;
   --status-resolved: #43c59e;
-  --status-postmortem: #9a7bff;
+  --status-postmortem: #a488ff;
 
   --bg: var(--slate);
   --card: var(--surface-1);
@@ -52,7 +55,8 @@
 
   --ink: #1b2230;
   --ink-muted: #56607a;
-  --ink-faint: #808aa0;
+  /* AA-compliant against white/paper surfaces. */
+  --ink-faint: #626d82;
 
   --amber: #c9791b;
   --amber-ink: #ffffff;

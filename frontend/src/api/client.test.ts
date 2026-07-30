@@ -33,7 +33,8 @@ describe('api client', () => {
 
     const result = await request<{ data: { ok: boolean } }>('/api/v1/x')
     expect(result.data.ok).toBe(true)
-    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const headers = init.headers as Record<string, string>
     expect(headers.Authorization).toBe('Bearer access-1')
   })
 

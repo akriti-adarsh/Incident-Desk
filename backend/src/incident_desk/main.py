@@ -22,6 +22,7 @@ from incident_desk.logging_setup import AccessLogMiddleware, configure_logging
 from incident_desk.middleware import RequestIDMiddleware
 from incident_desk.ratelimit import SlidingWindowLimiter
 from incident_desk.services.realtime import RealtimeBroker
+from incident_desk.shutdown import ConnectionRegistry
 
 
 class NotReadyError(AppError):
@@ -59,11 +60,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.rate_limiter = SlidingWindowLimiter(redis, settings.rate_limit_namespace)
     broker = RealtimeBroker(redis)
     app.state.broker = broker
+    app.state.ws_registry = ConnectionRegistry()
     await broker.start()
     app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))
     try:
         yield
     finally:
+        # Drain WebSockets first (code 1001), then tear down infrastructure.
+        await app.state.ws_registry.drain()
         await app.state.arq.aclose()
         await broker.stop()
         await redis.aclose()

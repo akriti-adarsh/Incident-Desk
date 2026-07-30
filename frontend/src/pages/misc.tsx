@@ -1,11 +1,12 @@
 // Small utility pages: onboarding (create first org), 403, 404.
 
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { ApiError, request } from '../api/client'
 import type { Data, Org } from '../api/types'
-import { Button, Field } from '../components/ui'
+import type { Role } from '../api/types'
+import { Button, Field, Spinner } from '../components/ui'
 import { useAuth } from '../store/auth'
 import { toast } from '../store/ui'
 
@@ -56,6 +57,51 @@ export function OnboardingPage() {
           </Button>
         </form>
       </div>
+    </div>
+  )
+}
+
+export function AcceptInvitePage() {
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  const token = params.get('token')
+  const loadSession = useAuth((s) => s.loadSession)
+  const setActiveOrg = useAuth((s) => s.setActiveOrg)
+  const [state, setState] = useState<'working' | 'error'>('working')
+
+  useEffect(() => {
+    async function accept() {
+      try {
+        const res = await request<Data<{ org_slug: string; org_name: string; role: Role }>>(
+          '/api/v1/invitations/accept',
+          { method: 'POST', body: { token } },
+        )
+        await loadSession()
+        setActiveOrg(res.data.org_slug)
+        toast('success', `You joined ${res.data.org_name}`)
+        navigate(`/o/${res.data.org_slug}/incidents`)
+      } catch (err) {
+        toast('error', err instanceof ApiError ? err.message : 'Could not accept the invitation.')
+        setState('error')
+      }
+    }
+    void accept()
+  }, [token, loadSession, setActiveOrg, navigate])
+
+  if (state === 'error') {
+    return (
+      <div className="route-error" role="alert">
+        <h1>Invitation problem</h1>
+        <p>This invitation is invalid, expired, or was sent to a different address.</p>
+        <Link to="/" className="btn btn-secondary">
+          Go to your organisations
+        </Link>
+      </div>
+    )
+  }
+  return (
+    <div className="app-loading">
+      <Spinner label="Accepting your invitation" />
     </div>
   )
 }
