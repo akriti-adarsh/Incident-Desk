@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     app_name: str = "incident-desk"
     environment: str = "dev"
 
-    database_url: str = "postgresql+asyncpg://incident:incident@localhost:55432/incident_desk"
-    sync_database_url: str = "postgresql+psycopg://incident:incident@localhost:55432/incident_desk"
+    database_url: str = "postgresql+asyncpg://incident:incident@localhost:55433/incident_desk"
+    sync_database_url: str = "postgresql+psycopg://incident:incident@localhost:55433/incident_desk"
     redis_url: str = "redis://localhost:56379/0"
 
     jwt_secret: str = "dev-only-secret-change-in-prod"

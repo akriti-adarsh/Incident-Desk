@@ -1,22 +1,12 @@
-"""Smoke tests for the app skeleton: health, error envelope, request ids."""
+"""Smoke tests for the app skeleton: health, readiness, error envelope, request ids."""
 
 import httpx
-import pytest
 from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from incident_desk.db.engine import get_db_session
 from incident_desk.errors import ConflictError
-from incident_desk.main import create_app
-
-
-@pytest.fixture
-def app() -> FastAPI:
-    return create_app()
-
-
-@pytest.fixture
-async def client(app: FastAPI) -> httpx.AsyncClient:
-    transport = httpx.ASGITransport(app=app)
-    return httpx.AsyncClient(transport=transport, base_url="http://testserver")
 
 
 async def test_health_ok(client: httpx.AsyncClient) -> None:
@@ -24,6 +14,39 @@ async def test_health_ok(client: httpx.AsyncClient) -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert len(response.headers["X-Request-ID"]) == 32
+
+
+async def test_ready_ok(client: httpx.AsyncClient) -> None:
+    response = await client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+async def test_ready_reports_503_when_database_is_unreachable(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    class BrokenSession:
+        async def execute(self, statement: object) -> None:
+            raise OSError("connection refused")
+
+    app.dependency_overrides[get_db_session] = lambda: BrokenSession()
+    response = await client.get("/health/ready")
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "not_ready"
+
+
+async def test_ready_through_real_session_dependency(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """Without the test override, the dependency builds a session from app.state."""
+    app.dependency_overrides.pop(get_db_session)
+    response = await client.get("/health/ready")
+    assert response.status_code == 200
+
+
+async def test_ready_uses_real_database(db_session: AsyncSession) -> None:
+    value = (await db_session.execute(text("SELECT 41 + 1"))).scalar_one()
+    assert value == 42
 
 
 async def test_unknown_route_returns_error_envelope(client: httpx.AsyncClient) -> None:
