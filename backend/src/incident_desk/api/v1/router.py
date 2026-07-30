@@ -12,6 +12,7 @@ from incident_desk.api.v1 import (
     metrics,
     oncall,
     orgs,
+    realtime,
     services,
 )
 
@@ -26,3 +27,4 @@ api_v1_router.include_router(incidents.router)
 api_v1_router.include_router(apikeys.router)
 api_v1_router.include_router(audit.router)
 api_v1_router.include_router(metrics.router)
+api_v1_router.include_router(realtime.router)

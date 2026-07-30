@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.api.authz import AuthContext, require
-from incident_desk.api.deps import AuditDep
+from incident_desk.api.deps import AuditDep, BrokerDep
 from incident_desk.authz import Permission, role_has
 from incident_desk.config import get_settings
 from incident_desk.db.engine import get_db_session
@@ -86,6 +86,7 @@ async def create_incident(
     ctx: CreateCtx,
     session: SessionDep,
     info: AuditDep,
+    broker: BrokerDep,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", max_length=200)] = None,
 ) -> Response:
     if idempotency_key is not None:
@@ -129,6 +130,16 @@ async def create_incident(
             await session.rollback()
             return _replay(winner.status_code, winner.response_body)
     await session.commit()
+    await broker.publish(
+        f"org:{ctx.org.slug}:incidents",
+        {
+            "type": "incident.created",
+            "incident_id": str(incident.id),
+            "number": f"INC-{incident.sequence_number}",
+            "title": incident.title,
+            "severity": incident.severity.value,
+        },
+    )
     return Response(content=body, status_code=201, media_type="application/json")
 
 
@@ -194,6 +205,7 @@ async def change_status(
     ctx: UpdateCtx,
     session: SessionDep,
     info: AuditDep,
+    broker: BrokerDep,
 ) -> Data[IncidentOut]:
     incident = await incident_service.get_incident(session, ctx.org, incident_id)
     before_status = incident.status.value
@@ -218,6 +230,14 @@ async def change_status(
         user_agent=info.user_agent,
     )
     await session.commit()
+    event = {
+        "type": "incident.status_changed",
+        "incident_id": str(incident.id),
+        "from": before_status,
+        "to": incident.status.value,
+    }
+    await broker.publish(f"org:{ctx.org.slug}:incidents", event)
+    await broker.publish(f"incident:{incident.id}", event)
     return Data(data=IncidentOut.model_validate(incident))
 
 
@@ -237,6 +257,7 @@ async def update_incident(
     session: SessionDep,
     response: Response,
     info: AuditDep,
+    broker: BrokerDep,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> Data[IncidentOut]:
     if if_match is None:
@@ -266,6 +287,13 @@ async def update_incident(
         user_agent=info.user_agent,
     )
     await session.commit()
+    event = {
+        "type": "incident.updated",
+        "incident_id": str(incident.id),
+        "fields": sorted(payload.model_fields_set),
+    }
+    await broker.publish(f"org:{ctx.org.slug}:incidents", event)
+    await broker.publish(f"incident:{incident.id}", event)
     response.headers["ETag"] = _etag(incident.version)
     return Data(data=IncidentOut.model_validate(incident))
 
@@ -314,6 +342,7 @@ async def add_comment(
     ctx: CommentCtx,
     session: SessionDep,
     info: AuditDep,
+    broker: BrokerDep,
 ) -> Data[CommentOut]:
     comment = await comment_service.add_comment(
         session, ctx.org, incident_id, author=ctx.require_user(), body=payload.body
@@ -329,6 +358,15 @@ async def add_comment(
         user_agent=info.user_agent,
     )
     await session.commit()
+    await broker.publish(
+        f"incident:{incident_id}",
+        {
+            "type": "comment.added",
+            "incident_id": str(incident_id),
+            "comment_id": str(comment.id),
+            "author_id": str(comment.author_id),
+        },
+    )
     return Data(data=CommentOut.model_validate(comment))
 
 

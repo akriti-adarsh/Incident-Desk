@@ -18,9 +18,9 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 20 of 39. Last completed: "feat(api): rate limiting and request tracing"
-- Suite at last commit: backend "284 passed" · Coverage: 96.90% · frontend "1 passed"
-- Open deviations: 0 · Next up: commits 21–24 (session C)
+- Plan position: 21 of 39. Last completed: "feat(realtime): authenticated websockets with redis fan-out"
+- Suite at last commit: backend "290 passed" · Coverage: 96.22% · frontend "1 passed"
+- Open deviations: 0 · Next up: commits 22–24
 - Notes: session B complete. Boundary checks: 50-way concurrent sequence test green every run; route-registration guard proves detection via a rogue route in-suite. Test plumbing: per-request savepoint sessions on one
   outer connection (conftest); services use begin_nested around risky flushes;
   Base has eager_defaults=True so onupdate timestamps come back via RETURNING.

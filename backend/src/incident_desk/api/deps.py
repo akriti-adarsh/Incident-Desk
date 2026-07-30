@@ -22,6 +22,7 @@ from incident_desk.db.engine import get_db_session
 from incident_desk.errors import UnauthorizedError
 from incident_desk.security.jwt import decode_access_token
 from incident_desk.security.tokens import hash_token
+from incident_desk.services.realtime import RealtimeBroker
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -112,3 +113,10 @@ def get_audit_info(request: Request) -> AuditInfo:
 
 
 AuditDep = Annotated[AuditInfo, Depends(get_audit_info)]
+
+
+def get_broker(request: Request) -> RealtimeBroker:
+    return request.app.state.broker  # type: ignore[no-any-return]
+
+
+BrokerDep = Annotated[RealtimeBroker, Depends(get_broker)]
