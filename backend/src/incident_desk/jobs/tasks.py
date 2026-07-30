@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import Delete, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from incident_desk.config import get_settings
@@ -98,6 +98,54 @@ async def check_escalation(ctx: dict[str, Any], incident_id: str, level: int) ->
                 decision.next_level,
                 _defer_by=decision.next_check_in,
             )
+
+
+async def prune_retention(ctx: dict[str, Any]) -> dict[str, int]:
+    """Nightly cleanup: old idempotency keys, expired auth tokens, aged audit
+    entries. Idempotent: re-running only deletes what is now past its window."""
+    sessionmaker = ctx["sessionmaker"]
+    async with sessionmaker() as session:
+        return await prune_retention_now(session)
+
+
+async def prune_retention_now(session: AsyncSession) -> dict[str, int]:
+    settings = get_settings()
+    now = datetime.now(UTC)
+    token_cutoff = now - timedelta(days=settings.expired_token_grace_days)
+
+    async def _delete(stmt: Delete) -> int:
+        result = await session.execute(stmt)
+        return int(result.rowcount)  # type: ignore[attr-defined]
+
+    counts = {
+        "idempotency_keys": await _delete(
+            delete(models.IdempotencyKey).where(
+                models.IdempotencyKey.created_at
+                < now - timedelta(hours=settings.idempotency_retention_hours)
+            )
+        ),
+        "audit_log": await _delete(
+            delete(models.AuditLog).where(
+                models.AuditLog.created_at < now - timedelta(days=settings.audit_retention_days)
+            )
+        ),
+        "refresh_tokens": await _delete(
+            delete(models.RefreshToken).where(models.RefreshToken.expires_at < token_cutoff)
+        ),
+        "reset_tokens": await _delete(
+            delete(models.PasswordResetToken).where(
+                models.PasswordResetToken.expires_at < token_cutoff
+            )
+        ),
+        "verification_tokens": await _delete(
+            delete(models.EmailVerificationToken).where(
+                models.EmailVerificationToken.expires_at < token_cutoff
+            )
+        ),
+    }
+    await session.commit()
+    logger.info("retention_pruned", **counts)
+    return counts
 
 
 async def scan_attachment(ctx: dict[str, Any], attachment_id: str, incident_id: str) -> None:

@@ -14,6 +14,7 @@ import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from arq import cron
 from arq.connections import RedisSettings
 
 from incident_desk.config import get_settings
@@ -22,6 +23,7 @@ from incident_desk.jobs.tasks import (
     always_fails,
     check_escalation,
     compute_daily_metrics,
+    prune_retention,
     scan_attachment,
     send_email,
 )
@@ -62,6 +64,7 @@ functions = [
     with_dead_letter(check_escalation),
     with_dead_letter(scan_attachment),
     with_dead_letter(compute_daily_metrics),
+    with_dead_letter(prune_retention),
     with_dead_letter(always_fails),
 ]
 
@@ -80,8 +83,16 @@ async def shutdown(ctx: dict[str, Any]) -> None:
     await ctx["engine"].dispose()
 
 
+# Nightly maintenance: metrics rollup at 00:05, retention pruning at 03:15 UTC.
+cron_jobs = [
+    cron(compute_daily_metrics, hour=0, minute=5, run_at_startup=False),
+    cron(prune_retention, hour=3, minute=15, run_at_startup=False),
+]
+
+
 class WorkerSettings:
     functions = functions
+    cron_jobs = cron_jobs
     on_startup = startup
     on_shutdown = shutdown
     max_tries = MAX_TRIES

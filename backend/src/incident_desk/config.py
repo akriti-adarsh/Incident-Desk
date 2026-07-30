@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     rate_limit_login_per_minute: int = 10
     rate_limit_namespace: str = "rl"
 
+    # Retention windows for the nightly pruning job.
+    audit_retention_days: int = 365
+    idempotency_retention_hours: int = 24
+    expired_token_grace_days: int = 7
+
     smtp_host: str = "localhost"
     smtp_port: int = 58025
     email_from: str = "incident-desk <no-reply@incident-desk.local>"
