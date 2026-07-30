@@ -152,7 +152,7 @@ async def transition_status(
     incident_id: UUID,
     *,
     new_status: IncidentStatus,
-    actor: models.User,
+    actor: models.User | None,
     resolution_summary: str | None = None,
 ) -> models.Incident:
     """Move an incident along the state machine, stamping the milestone times."""
@@ -181,7 +181,7 @@ async def transition_status(
     await timeline.record(
         session,
         incident_id=incident.id,
-        actor_id=actor.id,
+        actor_id=actor.id if actor else None,
         event_type="status.changed",
         payload={"from": previous.value, "to": new_status.value},
     )
@@ -193,7 +193,7 @@ async def update_incident(
     org: models.Organization,
     incident_id: UUID,
     *,
-    actor: models.User,
+    actor: models.User | None,
     title: str | None = None,
     description: str | None = None,
     severity: Severity | None = None,
@@ -220,7 +220,7 @@ async def update_incident(
         await timeline.record(
             session,
             incident_id=incident.id,
-            actor_id=actor.id,
+            actor_id=actor.id if actor else None,
             event_type="severity.changed",
             payload={"from": incident.severity.value, "to": severity.value},
         )
@@ -231,7 +231,7 @@ async def update_incident(
         await timeline.record(
             session,
             incident_id=incident.id,
-            actor_id=actor.id,
+            actor_id=actor.id if actor else None,
             event_type="assignment.changed",
             payload={
                 "from": str(incident.assigned_to) if incident.assigned_to else None,
@@ -247,7 +247,7 @@ async def update_incident(
         await timeline.record(
             session,
             incident_id=incident.id,
-            actor_id=actor.id,
+            actor_id=actor.id if actor else None,
             event_type="incident.updated",
             payload={"fields": edited_fields},
         )

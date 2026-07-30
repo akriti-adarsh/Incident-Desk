@@ -111,7 +111,7 @@ async def invite(
         ctx.org,
         email=payload.email,
         role=payload.role,
-        invited_by=ctx.user,
+        invited_by=ctx.require_user(),
         actor_role=ctx.role,
     )
     await session.commit()

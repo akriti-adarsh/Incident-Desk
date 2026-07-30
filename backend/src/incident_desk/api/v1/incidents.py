@@ -98,7 +98,7 @@ async def create_incident(
         title=payload.title,
         description=payload.description,
         severity=payload.severity,
-        reported_by=ctx.user,
+        reported_by=ctx.require_user(),
         assigned_to=payload.assigned_to,
         started_at=payload.started_at,
         tags=payload.tags,
@@ -265,7 +265,7 @@ async def add_comment(
     incident_id: UUID, payload: CommentCreate, ctx: CommentCtx, session: SessionDep
 ) -> Data[CommentOut]:
     comment = await comment_service.add_comment(
-        session, ctx.org, incident_id, author=ctx.user, body=payload.body
+        session, ctx.org, incident_id, author=ctx.require_user(), body=payload.body
     )
     await session.commit()
     return Data(data=CommentOut.model_validate(comment))
@@ -284,7 +284,7 @@ async def edit_comment(
     session: SessionDep,
 ) -> Data[CommentOut]:
     comment = await comment_service.edit_comment(
-        session, ctx.org, incident_id, comment_id, actor=ctx.user, body=payload.body
+        session, ctx.org, incident_id, comment_id, actor=ctx.require_user(), body=payload.body
     )
     await session.commit()
     return Data(data=CommentOut.model_validate(comment))
@@ -304,7 +304,7 @@ async def delete_comment(
         ctx.org,
         incident_id,
         comment_id,
-        actor=ctx.user,
+        actor=ctx.require_user(),
         can_moderate=role_has(ctx.role, Permission.COMMENT_MODERATE),
     )
     await session.commit()
@@ -328,7 +328,7 @@ async def upload_attachment(
     incident_id: UUID, file: UploadFile, ctx: UploadCtx, session: SessionDep
 ) -> Data[AttachmentOut]:
     attachment = await attachment_service.save_attachment(
-        session, get_settings(), ctx.org, incident_id, uploader=ctx.user, upload=file
+        session, get_settings(), ctx.org, incident_id, uploader=ctx.require_user(), upload=file
     )
     await session.commit()
     return Data(data=AttachmentOut.model_validate(attachment))

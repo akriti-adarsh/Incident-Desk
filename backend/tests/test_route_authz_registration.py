@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from fastapi import APIRouter, FastAPI
 from fastapi.dependencies.models import Dependant
 
-from incident_desk.api.deps import get_current_user
+from incident_desk.api.deps import get_current_user, get_principal
 from incident_desk.main import create_app
 from tests.route_table import iter_api_routes
 
@@ -37,7 +37,7 @@ def _walk(dependant: Dependant) -> Iterator[Dependant]:
 
 
 def _is_authenticated(dependant: Dependant) -> bool:
-    return any(d.call is get_current_user for d in _walk(dependant))
+    return any(d.call in (get_current_user, get_principal) for d in _walk(dependant))
 
 
 def _is_org_scoped_authorized(dependant: Dependant) -> bool:
