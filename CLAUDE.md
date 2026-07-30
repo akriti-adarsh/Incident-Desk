@@ -18,10 +18,10 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 24 of 39. Last completed: "feat(jobs): retries, dead lettering, retention pruning"
-- Suite at last commit: backend "304 passed" · Coverage: 96.15% · frontend "1 passed"
-- Open deviations: 1 · Next up: commits 25-33 (session D, frontend)
-- Notes: session C complete (websockets+jobs). Full backend suite ~8.5min locally (argon2 + ws timeouts). Session B complete. Boundary checks: 50-way concurrent sequence test green every run; route-registration guard proves detection via a rogue route in-suite. Test plumbing: per-request savepoint sessions on one
+- Plan position: 33 of 39. Last completed: "feat(seed): deterministic demo data"
+- Suite at last commit: backend "304 passed" · Coverage: 96.16% · frontend "25 passed"
+- Open deviations: 2 · Next up: commits 34-39 (session E)
+- Notes: session D complete (frontend + seed). App verified clickable against seed via browser: login, incident list (21 seeded), detail with timeline spine, org switch changes role (responder->owner) unlocking admin tabs. CORS added (SPA cross-origin). docker compose now builds api+worker+web+seed. Frontend commits consolidated (see DEVIATIONS). Session C complete (websockets+jobs). Full backend suite ~8.5min locally (argon2 + ws timeouts). Session B complete. Boundary checks: 50-way concurrent sequence test green every run; route-registration guard proves detection via a rogue route in-suite. Test plumbing: per-request savepoint sessions on one
   outer connection (conftest); services use begin_nested around risky flushes;
   Base has eager_defaults=True so onupdate timestamps come back via RETURNING.
   Route enumeration via tests/route_table.py (FastAPI defers router inclusion).

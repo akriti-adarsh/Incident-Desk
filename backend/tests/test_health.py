@@ -16,6 +16,22 @@ async def test_health_ok(client: httpx.AsyncClient) -> None:
     assert len(response.headers["X-Request-ID"]) == 32
 
 
+async def test_cors_preflight_is_allowed_for_the_frontend_origin(
+    client: httpx.AsyncClient,
+) -> None:
+    # The SPA is served from a different origin than the API; without CORS the
+    # browser's preflight fails and every request is blocked.
+    response = await client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "http://localhost:8080",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:8080"
+
+
 async def test_ready_ok(client: httpx.AsyncClient) -> None:
     response = await client.get("/health/ready")
     assert response.status_code == 200

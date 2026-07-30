@@ -53,6 +53,10 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM", "RUF", "T20"]
 
+[tool.ruff.lint.per-file-ignores]
+# CLI scripts print to the console by design.
+"scripts/*" = ["T20"]
+
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]

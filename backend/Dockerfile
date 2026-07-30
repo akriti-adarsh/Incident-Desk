@@ -22,4 +22,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 USER app
 EXPOSE 8000
 
-CMD ["uvicorn", "incident_desk.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["sh", "docker-entrypoint.sh"]

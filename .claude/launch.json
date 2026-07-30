@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "incident-desk-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "8080", "--strictPort"],
+      "cwd": "D:\\Akriti Projects\\incident-desk\\frontend",
+      "port": 8080
+    }
+  ]
+}

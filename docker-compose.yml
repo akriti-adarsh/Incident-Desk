@@ -45,14 +45,46 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       JWT_SECRET: dev-only-secret-change-in-production-use-32B+
+      CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
+      FRONTEND_BASE_URL: "http://localhost:8080"
+      SEED_ON_START: "true"
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       mailpit:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    entrypoint: ["arq", "incident_desk.jobs.worker.WorkerSettings"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://incident:incident@postgres:5432/incident_desk
+      SYNC_DATABASE_URL: postgresql+psycopg://incident:incident@postgres:5432/incident_desk
+      REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: http://localhost:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
         condition: service_healthy
 
 volumes:

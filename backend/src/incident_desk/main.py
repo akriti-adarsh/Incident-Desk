@@ -7,6 +7,7 @@ from typing import Annotated
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import APIRouter, Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,6 +76,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
     app.add_middleware(AccessLogMiddleware)
     app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Request-ID", "ETag", "Idempotency-Replayed"],
+    )
     register_error_handlers(app)
     app.include_router(health_router)
     app.include_router(api_v1_router)

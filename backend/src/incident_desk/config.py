@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     smtp_port: int = 58025
     email_from: str = "incident-desk <no-reply@incident-desk.local>"
     frontend_base_url: str = "http://localhost:8080"
+    # Comma-separated browser origins allowed to call the API (CORS). The SPA
+    # is served from a different origin than the API in both dev and compose.
+    cors_origins: str = "http://localhost:8080,http://127.0.0.1:8080"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache
