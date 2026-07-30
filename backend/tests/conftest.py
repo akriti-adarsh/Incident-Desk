@@ -11,7 +11,7 @@ Strategy (docs/BUILD_SPEC.md section 15, "Async SQLAlchemy + test isolation"):
 """
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
 import httpx
@@ -111,3 +111,21 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
         yield c
+
+
+@pytest.fixture
+def auth_headers(
+    client: httpx.AsyncClient,
+) -> Callable[[str], Awaitable[dict[str, str]]]:
+    """Log a factory user in and return Authorization headers for them."""
+
+    async def _login(email: str) -> dict[str, str]:
+        from tests.factories import PASSWORD
+
+        response = await client.post(
+            "/api/v1/auth/login", json={"email": email, "password": PASSWORD}
+        )
+        assert response.status_code == 200, response.text
+        return {"Authorization": f"Bearer {response.json()['data']['access_token']}"}
+
+    return _login

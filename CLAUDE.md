@@ -18,8 +18,8 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 8 of 39. Last completed: "feat(auth): password reset and session invalidation"
-- Suite at last commit: backend "63 passed" · Coverage: 98.57% · frontend "1 passed"
-- Open deviations: 0 · Next up: commits 9–10
+- Plan position: 9 of 39. Last completed: "feat(authz): permission matrix and org-scoped dependency"
+- Suite at last commit: backend "69 passed" · Coverage: 98.37% · frontend "1 passed"
+- Open deviations: 0 · Next up: commit 10
 - Note: coverage needs concurrency=["thread","greenlet"] or lines after awaited DB calls vanish
 - Notes for next session: session A in progress
