@@ -16,6 +16,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Identity,
     Index,
     Integer,
     String,
@@ -153,8 +154,12 @@ class IncidentEvent(TimestampMixin, Base):
     """Append-only timeline; the source of truth for what happened on an incident."""
 
     __tablename__ = "incident_events"
+    __table_args__ = (Index("ix_incident_events_incident_id_seq", "incident_id", "seq"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    # Monotonic insert order. Timestamps cannot order events written in the
+    # same transaction (now() is constant within one), an ordered log can.
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), nullable=False)
     incident_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True
     )

@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
@@ -46,3 +47,32 @@ class IncidentOut(BaseModel):
     @property
     def number(self) -> str:
         return f"INC-{self.sequence_number}"
+
+
+class StatusChangeRequest(BaseModel):
+    status: IncidentStatus = Field(description="The target status; must be a legal transition")
+    resolution_summary: str | None = Field(
+        default=None,
+        max_length=10000,
+        description="Required when resolving: what happened and how it was fixed",
+    )
+
+
+class IncidentUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=20000)
+    severity: Severity | None = None
+    assigned_to: uuid.UUID | None = Field(
+        default=None, description="Set to a member id, or null to unassign"
+    )
+    tags: list[str] | None = Field(default=None, max_length=20)
+
+
+class EventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    event_type: str
+    actor_id: uuid.UUID | None
+    payload: dict[str, Any]
+    created_at: datetime

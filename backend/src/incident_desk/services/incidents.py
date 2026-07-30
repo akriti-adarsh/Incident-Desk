@@ -1,18 +1,33 @@
-"""Incident lifecycle: creation with gapless per-org sequence numbers."""
+"""Incident lifecycle: creation, updates, and state-machine transitions."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from incident_desk import state_machine
 from incident_desk.db import models
-from incident_desk.enums import Severity
-from incident_desk.errors import ConflictError, NotFoundError
+from incident_desk.enums import IncidentStatus, Severity
+from incident_desk.errors import AppError, ConflictError, NotFoundError
+from incident_desk.services import timeline
 
 
 class AssigneeNotAMemberError(ConflictError):
     code = "assignee_not_a_member"
+
+
+class IllegalTransitionError(ConflictError):
+    code = "illegal_transition"
+
+
+class ResolutionSummaryRequiredError(AppError):
+    status_code = 400
+    code = "resolution_required"
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 def display_number(sequence_number: int) -> str:
@@ -97,6 +112,114 @@ async def create_incident(
     if started_at is not None:
         incident.started_at = started_at
     session.add(incident)
+    await session.flush()
+    await timeline.record(
+        session,
+        incident_id=incident.id,
+        actor_id=reported_by.id,
+        event_type="incident.created",
+        payload={
+            "severity": severity.value,
+            "service_id": str(service.id),
+            "number": display_number(sequence_number),
+        },
+    )
+    return incident
+
+
+async def transition_status(
+    session: AsyncSession,
+    org: models.Organization,
+    incident_id: UUID,
+    *,
+    new_status: IncidentStatus,
+    actor: models.User,
+    resolution_summary: str | None = None,
+) -> models.Incident:
+    """Move an incident along the state machine, stamping the milestone times."""
+    incident = await get_incident(session, org, incident_id)
+    if not state_machine.is_legal(incident.status, new_status):
+        raise IllegalTransitionError(
+            f"Cannot move from {incident.status.value} to {new_status.value}",
+            details={
+                "from": incident.status.value,
+                "to": new_status.value,
+                "allowed": sorted(t.value for t in state_machine.allowed_targets(incident.status)),
+            },
+        )
+    if new_status is IncidentStatus.RESOLVED and not (resolution_summary or "").strip():
+        raise ResolutionSummaryRequiredError("Resolving an incident requires a resolution summary")
+
+    previous = incident.status
+    incident.status = new_status
+    if new_status is IncidentStatus.ACKNOWLEDGED and incident.acknowledged_at is None:
+        incident.acknowledged_at = _now()
+    if new_status is IncidentStatus.RESOLVED:
+        incident.resolved_at = _now()
+        incident.resolution_summary = (resolution_summary or "").strip()
+    await session.flush()
+    await timeline.record(
+        session,
+        incident_id=incident.id,
+        actor_id=actor.id,
+        event_type="status.changed",
+        payload={"from": previous.value, "to": new_status.value},
+    )
+    return incident
+
+
+async def update_incident(
+    session: AsyncSession,
+    org: models.Organization,
+    incident_id: UUID,
+    *,
+    actor: models.User,
+    title: str | None = None,
+    description: str | None = None,
+    severity: Severity | None = None,
+    tags: list[str] | None = None,
+    assigned_to: UUID | None = None,
+    assignee_provided: bool = False,
+) -> models.Incident:
+    """Field updates, each recorded on the timeline."""
+    incident = await get_incident(session, org, incident_id)
+    edited_fields: list[str] = []
+
+    if severity is not None and severity != incident.severity:
+        await timeline.record(
+            session,
+            incident_id=incident.id,
+            actor_id=actor.id,
+            event_type="severity.changed",
+            payload={"from": incident.severity.value, "to": severity.value},
+        )
+        incident.severity = severity
+    if assignee_provided and assigned_to != incident.assigned_to:
+        if assigned_to is not None:
+            await _require_member(session, org.id, assigned_to)
+        await timeline.record(
+            session,
+            incident_id=incident.id,
+            actor_id=actor.id,
+            event_type="assignment.changed",
+            payload={
+                "from": str(incident.assigned_to) if incident.assigned_to else None,
+                "to": str(assigned_to) if assigned_to else None,
+            },
+        )
+        incident.assigned_to = assigned_to
+    for name, value in (("title", title), ("description", description), ("tags", tags)):
+        if value is not None and value != getattr(incident, name):
+            setattr(incident, name, value)
+            edited_fields.append(name)
+    if edited_fields:
+        await timeline.record(
+            session,
+            incident_id=incident.id,
+            actor_id=actor.id,
+            event_type="incident.updated",
+            payload={"fields": edited_fields},
+        )
     await session.flush()
     return incident
 
