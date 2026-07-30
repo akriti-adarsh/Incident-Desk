@@ -1,0 +1,64 @@
+[project]
+name = "incident-desk"
+version = "0.1.0"
+description = "Multi-tenant incident management platform backend"
+readme = "README.md"
+authors = [
+    { name = "akriti-adarsh", email = "152207508+akriti-adarsh@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "aiosmtplib>=5.1.2",
+    "alembic>=1.18.5",
+    "argon2-cffi>=25.1.0",
+    "asyncpg>=0.31.0",
+    "email-validator>=2.3.0",
+    "fastapi>=0.141.1",
+    "psycopg[binary]>=3.3.4",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "pyjwt>=2.13.0",
+    "pyotp>=2.10.0",
+    "sqlalchemy[asyncio]>=2.0.51",
+    "uvicorn[standard]>=0.52.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.0",
+    "pre-commit>=4.6.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.0",
+    "time-machine>=3.2.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM", "RUF", "T20"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+
+[tool.pytest.ini_options]
+addopts = "-q --cov=incident_desk --cov-report=term-missing --cov-fail-under=85"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
