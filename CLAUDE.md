@@ -18,9 +18,9 @@ The spec is docs/BUILD_SPEC.md. This file is rules and state; the spec defines t
    green commit and update State. Do not start work you cannot finish.
 
 ## State (update at every commit)
-- Plan position: 33 of 39. Last completed: "feat(seed): deterministic demo data"
-- Suite at last commit: backend "304 passed" · Coverage: 96.16% · frontend "25 passed"
-- Open deviations: 2 · Next up: commits 34-39 (session E)
+- Plan position: 35 of 39. Last completed: "perf: load test and index optimisation with query plans"
+- Suite at last commit: backend "312 passed" (pre-index) · Coverage: ~96% · frontend "25 passed" + 10 e2e
+- Open deviations: 3 · Next up: commits 36-39 (ops done in 34; ci drift done in 34; docs remain)
 - Notes: session D complete (frontend + seed). App verified clickable against seed via browser: login, incident list (21 seeded), detail with timeline spine, org switch changes role (responder->owner) unlocking admin tabs. CORS added (SPA cross-origin). docker compose now builds api+worker+web+seed. Frontend commits consolidated (see DEVIATIONS). Session C complete (websockets+jobs). Full backend suite ~8.5min locally (argon2 + ws timeouts). Session B complete. Boundary checks: 50-way concurrent sequence test green every run; route-registration guard proves detection via a rogue route in-suite. Test plumbing: per-request savepoint sessions on one
   outer connection (conftest); services use begin_nested around risky flushes;
   Base has eager_defaults=True so onupdate timestamps come back via RETURNING.

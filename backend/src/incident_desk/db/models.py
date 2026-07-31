@@ -121,6 +121,11 @@ class Incident(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "sequence_number"),
         Index("ix_incidents_search_vector", "search_vector", postgresql_using="gin"),
+        # Composite index matching the incident-list keyset query
+        # (WHERE org_id = ? ORDER BY created_at DESC, id DESC). Postgres scans
+        # the b-tree backwards for the DESC order, turning the per-org
+        # scan-and-sort into an index range scan; see docs/performance.md.
+        Index("ix_incidents_org_created_id", "org_id", "created_at", "id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)

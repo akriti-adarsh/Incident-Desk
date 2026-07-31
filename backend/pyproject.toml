@@ -35,6 +35,7 @@ build-backend = "uv_build"
 dev = [
     "asgi-lifespan>=2.1.0",
     "httpx>=0.28.1",
+    "locust>=2.46.2",
     "mypy>=2.3.0",
     "pre-commit>=4.6.1",
     "pytest>=9.1.1",
@@ -54,8 +55,9 @@ src = ["src", "tests"]
 select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM", "RUF", "T20"]
 
 [tool.ruff.lint.per-file-ignores]
-# CLI scripts print to the console by design.
+# CLI scripts and load-test tools print to the console by design.
 "scripts/*" = ["T20"]
+"loadtest/*" = ["T20"]
 
 [tool.mypy]
 strict = true
